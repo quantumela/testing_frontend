@@ -110,7 +110,7 @@ def set_background(image_file):
         </style>
     """, unsafe_allow_html=True)
 
-set_background("pexels-googledeepmind-17483873.jpg")
+set_background("images_1/pexels-googledeepmind-17483873.jpg")
 
 # ✅ Session state
 if "selected" not in st.session_state:
@@ -203,7 +203,7 @@ if selected == "Home":
         """)
 
     with col2:
-        st.image("pexels-divinetechygirl-1181263.jpg", use_container_width=True)
+        st.image("images_2/pexels-divinetechygirl-1181263.jpg", use_container_width=True)
         st.video("https://youtu.be/o_PcYfH36TI")
 
     col1, col2 = st.columns([3, 2.5])
@@ -213,7 +213,7 @@ if selected == "Home":
         <p>MVS is a robust solution for orchestrating HR data migration across hybrid environments, including SAP On-Premise, S/4HANA, SuccessFactors, and legacy systems.</p>
         """, unsafe_allow_html=True)
 
-        icons = ["data_icon.png", "check_icon.png", "chart_icon.png"]
+        icons = ["images_2/data_icon.png", "images_2/check_icon.png", "images_2/chart_icon.png"]
         descriptions = [
             "Template-driven, secure transfers between systems.",
             "Detailed checks at the field level to catch issues throughout the migration process.",
@@ -294,7 +294,7 @@ elif selected == "Launch Demo":
             with b3:
                 st.button("Legacy HR Systems → SAP Cloud or On-Premise (coming soon)", disabled=True)
 
-            st.image("dmigimg.jpg", use_container_width=True)
+            st.image("images_2/dmigimg.jpg", use_container_width=True)
 
     elif st.session_state.demo_page == "sap_to_sf":
         back_col, _ = st.columns([1, 5])
@@ -468,7 +468,7 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
                     """)
 
         with col2:
-            st.image("edmdr.png", use_container_width=True)
+            st.image("images_2/edmdr.png", use_container_width=True)
 
             st.markdown("### Supported Scenarios")
             st.markdown("""
@@ -487,7 +487,7 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
             """)
 
         # ✅ Bottom banner image
-        st.image("datamig_img.png", use_container_width=True)
+        st.image("images_2/datamig_img.png", use_container_width=True)
     # --- VALIDATION ---
     elif sol_choice == "Validation":
         col1, col2 = st.columns([3, 2.7])
@@ -514,7 +514,7 @@ Our validation services ensure HR data is correctly mapped, transformed, and loa
 - Full Audit Logging for Compliance  
 - Support for all Employee Information
             """)
-            st.image("validation_lifecycle.png", use_container_width=False, width=350)
+            st.image("images_1/validation_lifecycle.png", use_container_width=False, width=350)
 
     # --- DISCREPANCY ANALYSIS ---
     elif sol_choice == "Discrepancy Analysis Report":
@@ -542,6 +542,6 @@ Visual dashboards and summary reports offer real-time reconciliation status for 
 - Visual Reconciliation Dashboards  
 - Logged Issues for Governance & Audit
             """)
-            st.image("pexels-divinetechygirl-1181341.jpg", use_container_width=False, width=350)
+            st.image("images_1/pexels-divinetechygirl-1181341.jpg", use_container_width=False, width=350)
 
 
