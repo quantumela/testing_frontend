@@ -5,7 +5,105 @@ from streamlit_option_menu import option_menu
 from foundation_module.foundation_app import render as render_foundation
 from payroll import app as payroll_app
 from employee_app import render_employee_tool
-from employeedata.app.data_migration_tool import render_employee_v2
+
+# Add the employee_data_management path
+sys.path.append(os.path.join(os.path.dirname(__file__), 'employee_data_management'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'employee_data_management', 'panels'))
+
+# Import the employee data management panels
+try:
+    from employee_main_panel import show_employee_panel
+    from employee_statistics_panel import show_employee_statistics_panel  
+    from employee_validation_panel import show_employee_validation_panel
+    from employee_dashboard_panel import show_employee_dashboard_panel
+    from employee_admin_panel import show_employee_admin_panel
+    EMPLOYEE_DATA_AVAILABLE = True
+except ImportError as e:
+    EMPLOYEE_DATA_AVAILABLE = False
+    print(f"Employee data management modules not available: {e}")
+
+# Function to render the employee data management system
+def render_employee_data_management():
+    """Render the complete employee data management system"""
+    if not EMPLOYEE_DATA_AVAILABLE:
+        st.error("❌ Employee Data Management system not available. Please check your installation.")
+        return
+    
+    # Initialize employee session state if not exists
+    if 'employee_state' not in st.session_state:
+        st.session_state.employee_state = {}
+    
+    employee_state = st.session_state.employee_state
+    
+    # Create a container for the employee management system
+    with st.container():
+        st.markdown("### 👥 Employee Data Management System")
+        
+        # Navigation for employee panels
+        panel_choice = st.selectbox(
+            "**Choose Panel:**",
+            [
+                "🏠 Employee Processing",
+                "📊 Statistics & Detective", 
+                "✅ Data Validation",
+                "📈 Dashboard",
+                "⚙️ Admin Configuration"
+            ],
+            key="employee_panel_selection"
+        )
+        
+        # Show quick status
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            pa_files_loaded = sum(1 for file_key in ['PA0001', 'PA0002', 'PA0006', 'PA0105'] 
+                                 if employee_state.get(f'source_{file_key.lower()}') is not None)
+            st.metric("📂 PA Files Loaded", f"{pa_files_loaded}/4")
+        
+        with col2:
+            output_generated = 'generated_employee_files' in employee_state and employee_state['generated_employee_files']
+            st.metric("📤 Output Status", "✅ Generated" if output_generated else "❌ Not yet")
+        
+        with col3:
+            if pa_files_loaded >= 2:
+                st.success("✅ Ready to process")
+            else:
+                st.error("❌ Need PA0001 & PA0002")
+        
+        st.markdown("---")
+        
+        # Show selected panel
+        try:
+            if panel_choice == "🏠 Employee Processing":
+                show_employee_panel(employee_state)
+            elif panel_choice == "📊 Statistics & Detective":
+                # Add warning for large datasets
+                pa0002_data = employee_state.get('source_pa0002')
+                if pa0002_data is not None and len(pa0002_data) > 10000:
+                    st.warning("⚠️ Large dataset detected. Statistics panel may take a moment to load...")
+                
+                with st.spinner("Loading statistics..."):
+                    show_employee_statistics_panel(employee_state)
+            elif panel_choice == "✅ Data Validation":
+                with st.spinner("Running validation checks..."):
+                    show_employee_validation_panel(employee_state)
+            elif panel_choice == "📈 Dashboard":
+                show_employee_dashboard_panel(employee_state)
+            elif panel_choice == "⚙️ Admin Configuration":
+                show_employee_admin_panel()
+
+        except Exception as e:
+            st.error(f"❌ **Panel Error:** {str(e)}")
+            st.info("**What to do:** Try refreshing the page or switching to a different panel")
+            
+            # Show error details in expander
+            with st.expander("🔍 Technical Details", expanded=False):
+                st.code(str(e))
+                if st.button("🔄 Reset Employee Session", key="reset_employee_session"):
+                    if 'employee_state' in st.session_state:
+                        del st.session_state['employee_state']
+                    st.rerun()
+
 # Hide Streamlit style (footer and hamburger menu)
 # 🔒 Hide Streamlit footer, menu, and header for a cleaner look
 st.markdown("""
@@ -110,7 +208,7 @@ def set_background(image_file):
         </style>
     """, unsafe_allow_html=True)
 
-set_background("images_1/pexels-googledeepmind-17483873.jpg")
+set_background("pexels-googledeepmind-17483873.jpg")
 
 # ✅ Session state
 if "selected" not in st.session_state:
@@ -203,7 +301,7 @@ if selected == "Home":
         """)
 
     with col2:
-        st.image("images_2/pexels-divinetechygirl-1181263.jpg", use_container_width=True)
+        st.image("pexels-divinetechygirl-1181263.jpg", use_container_width=True)
         st.video("https://youtu.be/o_PcYfH36TI")
 
     col1, col2 = st.columns([3, 2.5])
@@ -213,7 +311,7 @@ if selected == "Home":
         <p>MVS is a robust solution for orchestrating HR data migration across hybrid environments, including SAP On-Premise, S/4HANA, SuccessFactors, and legacy systems.</p>
         """, unsafe_allow_html=True)
 
-        icons = ["images_2/data_icon.png", "images_2/check_icon.png", "images_2/chart_icon.png"]
+        icons = ["data_icon.png", "check_icon.png", "chart_icon.png"]
         descriptions = [
             "Template-driven, secure transfers between systems.",
             "Detailed checks at the field level to catch issues throughout the migration process.",
@@ -294,7 +392,7 @@ elif selected == "Launch Demo":
             with b3:
                 st.button("Legacy HR Systems → SAP Cloud or On-Premise (coming soon)", disabled=True)
 
-            st.image("images_2/dmigimg.jpg", use_container_width=True)
+            st.image("dmigimg.jpg", use_container_width=True)
 
     elif st.session_state.demo_page == "sap_to_sf":
         back_col, _ = st.columns([1, 5])
@@ -338,12 +436,12 @@ elif selected == "Launch Demo":
         # Payroll Data
         migration_row("Payroll Data", "ptd_demo", "- Payment Info\n- Super Funds\n- Cost Allocations\n...", next_page="payroll_data_tool")
 
-        # Employee Data V2 — single version only
+        # Employee Data - UPDATED to use new system
         migration_row(
             "Employee Data",
             "pd_demo",
-            "- Personal Info\n- Employment Info\n- Compensation Info\n- Time Info\n...",
-            next_page="employee_data_v2"
+            "- Personal Info\n- Employment Info\n- Compensation Info\n- Time Info\n- Advanced Processing & Validation\n- Statistics & Analytics\n- Admin Configuration",
+            next_page="employee_data_management"
         )
 
 
@@ -367,17 +465,19 @@ elif selected == "Launch Demo":
         st.markdown("### Foundation Data – Interactive View")
         render_foundation()
 
-
-    elif st.session_state.demo_page == "employee_data_v2":
+    # NEW: Employee Data Management System
+    elif st.session_state.demo_page == "employee_data_management":
         back_col, _ = st.columns([1, 5])
         with back_col:
-            if st.button("⬅ Back to Demo", key="back_from_empv2", use_container_width=True):
+            if st.button("⬅ Back to Demo", key="back_from_employee_mgmt", use_container_width=True):
                 st.session_state.demo_page = "sap_to_sf"
                 st.rerun()
 
-        st.markdown("### Employee Data V2 – Interactive Migration Tool")
-        render_employee_v2()
+        # Render the complete employee data management system
+        render_employee_data_management()
 
+    # Remove the old employee_data_v2 section since it's replaced
+    
 
 # -------------------- SOLUTIONS --------------------
 elif selected == "Solutions":
@@ -468,7 +568,7 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
                     """)
 
         with col2:
-            st.image("images_2/edmdr.png", use_container_width=True)
+            st.image("edmdr.png", use_container_width=True)
 
             st.markdown("### Supported Scenarios")
             st.markdown("""
@@ -487,7 +587,7 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
             """)
 
         # ✅ Bottom banner image
-        st.image("images_2/datamig_img.png", use_container_width=True)
+        st.image("datamig_img.png", use_container_width=True)
     # --- VALIDATION ---
     elif sol_choice == "Validation":
         col1, col2 = st.columns([3, 2.7])
@@ -514,7 +614,7 @@ Our validation services ensure HR data is correctly mapped, transformed, and loa
 - Full Audit Logging for Compliance  
 - Support for all Employee Information
             """)
-            st.image("images_1/validation_lifecycle.png", use_container_width=False, width=350)
+            st.image("validation_lifecycle.png", use_container_width=False, width=350)
 
     # --- DISCREPANCY ANALYSIS ---
     elif sol_choice == "Discrepancy Analysis Report":
@@ -542,6 +642,4 @@ Visual dashboards and summary reports offer real-time reconciliation status for 
 - Visual Reconciliation Dashboards  
 - Logged Issues for Governance & Audit
             """)
-            st.image("images_1/pexels-divinetechygirl-1181341.jpg", use_container_width=False, width=350)
-
-
+            st.image("pexels-divinetechygirl-1181341.jpg", use_container_width=False, width=350)
