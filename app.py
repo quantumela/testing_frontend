@@ -9,6 +9,14 @@ from employee_app import render_employee_tool
 # Import the employee data management wrapper
 try:
     from employee_data_wrapper import render_employee_data_management, get_employee_system_status
+
+# Import the payroll data management wrapper
+try:
+    from payroll_data_wrapper import render_payroll_data_management, get_payroll_system_status
+    PAYROLL_WRAPPER_AVAILABLE = True
+except ImportError as e:
+    PAYROLL_WRAPPER_AVAILABLE = False
+    print(f"Payroll wrapper not available: {e}")
     EMPLOYEE_WRAPPER_AVAILABLE = True
 except ImportError as e:
     EMPLOYEE_WRAPPER_AVAILABLE = False
@@ -373,8 +381,17 @@ elif selected == "Launch Demo":
         # Time Data — disabled
         migration_row("Time Data", "td_demo_disabled", "- Time Type\n- Accruals\n- Time Accounts\n- Absences\n...", enabled=False)
 
-        # Payroll Data
-        migration_row("Payroll Data", "ptd_demo", "- Payment Info\n- Super Funds\n- Cost Allocations\n...", next_page="payroll_data_tool")
+        # Payroll Data - NEW ENHANCED VERSION
+        payroll_label = "Payroll Data Management" if PAYROLL_WRAPPER_AVAILABLE else "Payroll Data"
+        payroll_details = ("**🆕 Enhanced Payroll Data System**\n\n" +
+                          "- **Processing:** PA0008 (Basic Pay) & PA0014 (Recurring Payments) files\n" +
+                          "- **Statistics & Analytics:** Wage type analysis and payroll insights\n" +
+                          "- **Validation:** Comprehensive payroll data validation engine\n" +
+                          "- **Dashboard:** Real-time payroll migration progress\n" +
+                          "- **Admin Config:** Advanced payroll system configuration\n\n" +
+                          "*Full-featured payroll data migration suite*") if PAYROLL_WRAPPER_AVAILABLE else "- Payment Info\n- Super Funds\n- Cost Allocations\n..."
+        
+        migration_row(payroll_label, "ptd_demo", payroll_details, next_page="payroll_data_tool")
 
         # Employee Data - Check if wrapper is available
         if EMPLOYEE_WRAPPER_AVAILABLE:
@@ -406,7 +423,16 @@ elif selected == "Launch Demo":
                 st.session_state.demo_page = "sap_to_sf"
                 st.rerun()
 
-        payroll_app.render_payroll_tool()
+        # Render the enhanced payroll system or fallback to old one
+        if PAYROLL_WRAPPER_AVAILABLE:
+            render_payroll_data_management()
+        else:
+            # Fallback to old payroll system
+            try:
+                payroll_app.render_payroll_tool()
+            except Exception as e:
+                st.error("❌ Payroll system not available.")
+                st.info("Please check your payroll installation and try again.")
 
     elif st.session_state.demo_page == "foundation_data_view":
         back_col, _ = st.columns([1, 5])
@@ -527,14 +553,26 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
                 if st.button("Payroll Data", key="ptd_btn"):
                     st.session_state.show_ptd = not st.session_state.show_ptd
                 if st.session_state.show_ptd:
-                    st.info("""
+                    if PAYROLL_WRAPPER_AVAILABLE:
+                        st.info("""
+**Enhanced Payroll Processing:**
+- PA0008 (Basic Pay) Processing
+- PA0014 (Recurring Payments/Deductions)  
+- Wage Type Mapping & Validation
+- Payment Amount Verification
+- Currency & Exchange Rate Handling
+- Cost Center Distribution
+- Advanced Analytics & Reporting
+                        """)
+                    else:
+                        st.info("""
 - Bank Info  
 - Super Funds  
 - Daily Work Schedule  
 - Period Work Schedule  
 - Work Schedule Rules  
 - Cost Center  
-                    """)
+                        """)
 
         with col2:
             display_image("edmdr.png", "Data Migration Process", use_container_width=True)
