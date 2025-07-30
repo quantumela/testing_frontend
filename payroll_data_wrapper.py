@@ -150,7 +150,7 @@ def render_payroll_data_management():
     
     # Create a container for the payroll management system
     with st.container():
-        st.markdown("### 💰 Payroll Data Management System")
+        st.markdown("### Employee Data – Payroll")
         st.markdown("*Advanced processing, validation, and analytics for SAP HCM → SuccessFactors payroll migration*")
         
         # Navigation for payroll panels
