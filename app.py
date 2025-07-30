@@ -7,7 +7,12 @@ from payroll import app as payroll_app
 from employee_app import render_employee_tool
 
 # Import the employee data management wrapper
-from employee_data_wrapper import render_employee_data_management, get_employee_system_status
+try:
+    from employee_data_wrapper import render_employee_data_management, get_employee_system_status
+    EMPLOYEE_WRAPPER_AVAILABLE = True
+except ImportError as e:
+    EMPLOYEE_WRAPPER_AVAILABLE = False
+    print(f"Employee wrapper not available: {e}")
 
 # Hide Streamlit style (footer and hamburger menu)
 st.markdown("""
@@ -89,25 +94,49 @@ section.main > div, .block-container {
     opacity: 1 !important;
     pointer-events: all !important;
 }
+
+/* Default background gradient if image not available */
+.stApp {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background-attachment: fixed;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ✅ Background image setup
+# ✅ Background image setup with error handling
 def set_background(image_file):
-    with open(image_file, "rb") as f:
-        data = base64.b64encode(f.read()).decode()
-    st.markdown(f"""
-        <style>
-            .stApp {{
-                background: linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)),
-                            url("data:image/jpeg;base64,{data}");
-                background-size: cover;
-                background-attachment: fixed;
-                background-position: center;
-            }}
-        </style>
-    """, unsafe_allow_html=True)
+    """Set background image with graceful fallback"""
+    try:
+        if os.path.exists(image_file):
+            with open(image_file, "rb") as f:
+                data = base64.b64encode(f.read()).decode()
+            st.markdown(f"""
+                <style>
+                    .stApp {{
+                        background: linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)),
+                                    url("data:image/jpeg;base64,{data}");
+                        background-size: cover;
+                        background-attachment: fixed;
+                        background-position: center;
+                    }}
+                </style>
+            """, unsafe_allow_html=True)
+        else:
+            # Fallback to gradient background
+            st.markdown("""
+                <style>
+                    .stApp {
+                        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                        background-attachment: fixed;
+                    }
+                </style>
+            """, unsafe_allow_html=True)
+    except Exception as e:
+        # If any error occurs, just use the default gradient
+        print(f"Background image error: {e}")
+        pass
 
+# Try to set background, fallback gracefully if image doesn't exist
 set_background("pexels-googledeepmind-17483873.jpg")
 
 # ✅ Session state
@@ -151,6 +180,17 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Helper function to display images with fallback
+def display_image(image_path, alt_text="Image", **kwargs):
+    """Display image with fallback to placeholder if not found"""
+    try:
+        if os.path.exists(image_path):
+            st.image(image_path, **kwargs)
+        else:
+            st.info(f"📷 {alt_text} (Image not found: {image_path})")
+    except Exception as e:
+        st.info(f"📷 {alt_text} (Image loading error)")
 
 # -------------------- HOME --------------------
 if selected == "Home":
@@ -199,8 +239,13 @@ if selected == "Home":
         """)
 
     with col2:
-        st.image("pexels-divinetechygirl-1181263.jpg", use_container_width=True)
-        st.video("https://youtu.be/o_PcYfH36TI")
+        display_image("pexels-divinetechygirl-1181263.jpg", "Data Migration Illustration", use_container_width=True)
+        
+        # Video with error handling
+        try:
+            st.video("https://youtu.be/o_PcYfH36TI")
+        except:
+            st.info("📹 Demo video (Loading...)")
 
     col1, col2 = st.columns([3, 2.5])
     with col1:
@@ -219,13 +264,19 @@ if selected == "Home":
         for icon, desc in zip(icons, descriptions):
             icon_col, text_col = st.columns([1, 6])
             with icon_col:
-                if os.path.exists(icon):
-                    with open(icon, "rb") as f:
-                        img_data = base64.b64encode(f.read()).decode()
-                    st.markdown(
-                        f"""<img src="data:image/png;base64,{img_data}" width="40" style="margin-top:10px;">""",
-                        unsafe_allow_html=True
-                    )
+                try:
+                    if os.path.exists(icon):
+                        with open(icon, "rb") as f:
+                            img_data = base64.b64encode(f.read()).decode()
+                        st.markdown(
+                            f"""<img src="data:image/png;base64,{img_data}" width="40" style="margin-top:10px;">""",
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.markdown("📊", unsafe_allow_html=True)  # Fallback emoji
+                except:
+                    st.markdown("📊", unsafe_allow_html=True)  # Fallback emoji
+                    
             with text_col:
                 st.markdown(f"<p style='margin-top:18px;'>{desc}</p>", unsafe_allow_html=True)
 
@@ -290,7 +341,7 @@ elif selected == "Launch Demo":
             with b3:
                 st.button("Legacy HR Systems → SAP Cloud or On-Premise (coming soon)", disabled=True)
 
-            st.image("dmigimg.jpg", use_container_width=True)
+            display_image("dmigimg.jpg", "Migration Scenarios", use_container_width=True)
 
     elif st.session_state.demo_page == "sap_to_sf":
         back_col, _ = st.columns([1, 5])
@@ -325,19 +376,28 @@ elif selected == "Launch Demo":
         # Payroll Data
         migration_row("Payroll Data", "ptd_demo", "- Payment Info\n- Super Funds\n- Cost Allocations\n...", next_page="payroll_data_tool")
 
-        # Employee Data - NEW ENHANCED VERSION
-        migration_row(
-            "Employee Data Management", 
-            "emp_mgmt_demo", 
-            "**🆕 Enhanced Employee Data System**\n\n" +
-            "- **Processing:** PA0001, PA0002, PA0006, PA0105 files\n" +
-            "- **Statistics & Analytics:** Data insights and quality analysis\n" +
-            "- **Validation:** Comprehensive data validation engine\n" +
-            "- **Dashboard:** Real-time migration progress\n" +
-            "- **Admin Config:** Advanced system configuration\n\n" +
-            "*Full-featured employee data migration suite*", 
-            next_page="employee_data_management"
-        )
+        # Employee Data - Check if wrapper is available
+        if EMPLOYEE_WRAPPER_AVAILABLE:
+            migration_row(
+                "Employee Data Management", 
+                "emp_mgmt_demo", 
+                "**🆕 Enhanced Employee Data System**\n\n" +
+                "- **Processing:** PA0001, PA0002, PA0006, PA0105 files\n" +
+                "- **Statistics & Analytics:** Data insights and quality analysis\n" +
+                "- **Validation:** Comprehensive data validation engine\n" +
+                "- **Dashboard:** Real-time migration progress\n" +
+                "- **Admin Config:** Advanced system configuration\n\n" +
+                "*Full-featured employee data migration suite*", 
+                next_page="employee_data_management"
+            )
+        else:
+            # Fallback to old employee system
+            migration_row(
+                "Employee Data", 
+                "emp_old_demo", 
+                "- Personal Info\n- Employment Info\n- Compensation Info\n- Time Info\n...", 
+                next_page="employee_data_v2"
+            )
 
     elif st.session_state.demo_page == "payroll_data_tool":
         back_col, _ = st.columns([1, 5])
@@ -367,7 +427,26 @@ elif selected == "Launch Demo":
                 st.rerun()
 
         # Render the complete employee data management system
-        render_employee_data_management()
+        if EMPLOYEE_WRAPPER_AVAILABLE:
+            render_employee_data_management()
+        else:
+            st.error("❌ Employee Data Management system not available.")
+            st.info("Please check your installation and try again.")
+
+    # Fallback for old employee system
+    elif st.session_state.demo_page == "employee_data_v2":
+        back_col, _ = st.columns([1, 5])
+        with back_col:
+            if st.button("⬅ Back to Demo", key="back_from_empv2", use_container_width=True):
+                st.session_state.demo_page = "sap_to_sf"
+                st.rerun()
+
+        st.markdown("### Employee Data V2 – Interactive Migration Tool")
+        try:
+            from employeedata.app.data_migration_tool import render_employee_v2
+            render_employee_v2()
+        except ImportError:
+            st.error("Employee data V2 system not available")
 
 # -------------------- SOLUTIONS --------------------
 elif selected == "Solutions":
@@ -458,7 +537,7 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
                     """)
 
         with col2:
-            st.image("edmdr.png", use_container_width=True)
+            display_image("edmdr.png", "Data Migration Process", use_container_width=True)
 
             st.markdown("### Supported Scenarios")
             st.markdown("""
@@ -477,7 +556,7 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
             """)
 
         # ✅ Bottom banner image
-        st.image("datamig_img.png", use_container_width=True)
+        display_image("datamig_img.png", "Data Migration Overview", use_container_width=True)
         
     # --- VALIDATION ---
     elif sol_choice == "Validation":
@@ -505,7 +584,7 @@ Our validation services ensure HR data is correctly mapped, transformed, and loa
 - Full Audit Logging for Compliance  
 - Support for all Employee Information
             """)
-            st.image("validation_lifecycle.png", use_container_width=False, width=350)
+            display_image("validation_lifecycle.png", "Validation Lifecycle", use_container_width=False, width=350)
 
     # --- DISCREPANCY ANALYSIS ---
     elif sol_choice == "Discrepancy Analysis Report":
@@ -533,4 +612,4 @@ Visual dashboards and summary reports offer real-time reconciliation status for 
 - Visual Reconciliation Dashboards  
 - Logged Issues for Governance & Audit
             """)
-            st.image("pexels-divinetechygirl-1181341.jpg", use_container_width=False, width=350)
+            display_image("pexels-divinetechygirl-1181341.jpg", "Analytics Dashboard", use_container_width=False, width=350)
