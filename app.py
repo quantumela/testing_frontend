@@ -387,7 +387,7 @@ elif selected == "Launch Demo":
         migration_row("Time Data", "td_demo_disabled", "- Time Type\n- Accruals\n- Time Accounts\n- Absences\n...", enabled=False)
 
         # Payroll Data - NEW ENHANCED VERSION
-        payroll_label = "Payroll Data Management" if PAYROLL_WRAPPER_AVAILABLE else "Payroll Data"
+        payroll_label = "Employee Data – Payroll" if PAYROLL_WRAPPER_AVAILABLE else "Payroll Data"
         payroll_details = ("**🆕 Enhanced Payroll Data System**\n\n" +
                           "- **Processing:** PA0008 (Basic Pay) & PA0014 (Recurring Payments) files\n" +
                           "- **Statistics & Analytics:** Wage type analysis and payroll insights\n" +
