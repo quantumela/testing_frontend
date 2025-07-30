@@ -12,26 +12,62 @@ current_dir = os.path.dirname(__file__)
 employee_data_path = os.path.join(current_dir, 'employee_data_management')
 panels_path = os.path.join(employee_data_path, 'panels')
 
-sys.path.insert(0, employee_data_path)
-sys.path.insert(0, panels_path)
+# Add paths to sys.path if they don't exist
+if employee_data_path not in sys.path:
+    sys.path.insert(0, employee_data_path)
+if panels_path not in sys.path:
+    sys.path.insert(0, panels_path)
 
 # Import the employee data management panels
 try:
-    from employee_main_panel import show_employee_panel
-    from employee_statistics_panel import show_employee_statistics_panel  
-    from employee_validation_panel import show_employee_validation_panel
-    from employee_dashboard_panel import show_employee_dashboard_panel
-    from employee_admin_panel import show_employee_admin_panel
+    from panels.employee_main_panel import show_employee_panel
+    from panels.employee_statistics_panel import show_employee_statistics_panel  
+    from panels.employee_validation_panel import show_employee_validation_panel
+    from panels.employee_dashboard_panel import show_employee_dashboard_panel
+    from panels.employee_admin_panel import show_employee_admin_panel
     EMPLOYEE_DATA_AVAILABLE = True
+    
 except ImportError as e:
-    EMPLOYEE_DATA_AVAILABLE = False
-    st.error(f"Employee data management modules not available: {e}")
+    try:
+        # Fallback - try without panels prefix
+        from employee_main_panel import show_employee_panel
+        from employee_statistics_panel import show_employee_statistics_panel  
+        from employee_validation_panel import show_employee_validation_panel
+        from employee_dashboard_panel import show_employee_dashboard_panel
+        from employee_admin_panel import show_employee_admin_panel
+        EMPLOYEE_DATA_AVAILABLE = True
+        
+    except ImportError as e2:
+        EMPLOYEE_DATA_AVAILABLE = False
+        print(f"Employee data management modules not available: {e2}")
 
 def render_employee_data_management():
     """Render the complete employee data management system"""
     if not EMPLOYEE_DATA_AVAILABLE:
-        st.error("❌ Employee Data Management system not available. Please check your installation.")
-        st.info("Make sure the 'employee_data_management' folder is in the same directory as your main app.py")
+        st.error("❌ Employee Data Management system not available.")
+        with st.expander("🔍 Troubleshooting", expanded=False):
+            st.markdown("""
+            **Common issues:**
+            1. Make sure the 'employee_data_management' folder is in the same directory as app.py
+            2. Check that all panel files exist in the 'panels' folder
+            3. Verify that __init__.py exists in the panels folder
+            
+            **Expected structure:**
+            ```
+            your_project/
+            ├── app.py
+            ├── employee_data_wrapper.py
+            └── employee_data_management/
+                ├── panels/
+                │   ├── __init__.py
+                │   ├── employee_main_panel.py
+                │   ├── employee_statistics_panel.py
+                │   ├── employee_validation_panel.py
+                │   ├── employee_dashboard_panel.py
+                │   └── employee_admin_panel.py
+                └── main_app.py
+            ```
+            """)
         return
     
     # Initialize employee session state if not exists
