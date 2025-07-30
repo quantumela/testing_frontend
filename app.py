@@ -3,12 +3,15 @@ import streamlit as st
 import base64
 from streamlit_option_menu import option_menu
 from foundation_module.foundation_app import render as render_foundation
-from payroll import app as payroll_app
 from employee_app import render_employee_tool
 
 # Import the employee data management wrapper
 try:
     from employee_data_wrapper import render_employee_data_management, get_employee_system_status
+    EMPLOYEE_WRAPPER_AVAILABLE = True
+except ImportError as e:
+    EMPLOYEE_WRAPPER_AVAILABLE = False
+    print(f"Employee wrapper not available: {e}")
 
 # Import the payroll data management wrapper
 try:
@@ -17,10 +20,12 @@ try:
 except ImportError as e:
     PAYROLL_WRAPPER_AVAILABLE = False
     print(f"Payroll wrapper not available: {e}")
-    EMPLOYEE_WRAPPER_AVAILABLE = True
-except ImportError as e:
-    EMPLOYEE_WRAPPER_AVAILABLE = False
-    print(f"Employee wrapper not available: {e}")
+    # Fallback to old payroll system
+    try:
+        from payroll import app as payroll_app
+        OLD_PAYROLL_AVAILABLE = True
+    except ImportError:
+        OLD_PAYROLL_AVAILABLE = False
 
 # Hide Streamlit style (footer and hamburger menu)
 st.markdown("""
@@ -429,7 +434,11 @@ elif selected == "Launch Demo":
         else:
             # Fallback to old payroll system
             try:
-                payroll_app.render_payroll_tool()
+                if 'OLD_PAYROLL_AVAILABLE' in globals() and OLD_PAYROLL_AVAILABLE:
+                    payroll_app.render_payroll_tool()
+                else:
+                    st.error("❌ Payroll system not available.")
+                    st.info("Please check your payroll installation and try again.")
             except Exception as e:
                 st.error("❌ Payroll system not available.")
                 st.info("Please check your payroll installation and try again.")
