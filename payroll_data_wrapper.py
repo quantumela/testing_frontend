@@ -9,11 +9,12 @@ import streamlit as st
 
 # Add the payroll paths - try multiple locations
 current_dir = os.path.dirname(__file__)
-payroll_path = os.path.join(current_dir, 'payroll')
+payroll_data_path = os.path.join(current_dir, 'payroll_data')  # Your new payroll system
+payroll_path = os.path.join(current_dir, 'payroll')  # Your old payroll system
 payroll_panels_path = os.path.join(current_dir, 'payroll_panels')
 
 # Add paths to sys.path if they don't exist
-paths_to_add = [payroll_path, payroll_panels_path]
+paths_to_add = [payroll_data_path, payroll_path, payroll_panels_path]
 for path in paths_to_add:
     if os.path.exists(path) and path not in sys.path:
         sys.path.insert(0, path)
@@ -22,19 +23,33 @@ for path in paths_to_add:
 PAYROLL_DATA_AVAILABLE = False
 import_error_messages = []
 
-# Strategy 1: Direct import (panels in current directory or already in path)
+# Strategy 1: Import from payroll_data directory (NEW SYSTEM - PRIORITY)
 try:
+    sys.path.insert(0, payroll_data_path)
     from payroll_main_panel import show_payroll_panel
     from payroll_statistics_panel import show_payroll_statistics_panel  
     from payroll_validation_panel import show_payroll_validation_panel
     from payroll_dashboard_panel import show_payroll_dashboard_panel
     from payroll_admin_panel import show_payroll_admin_panel
     PAYROLL_DATA_AVAILABLE = True
-    print("✅ Payroll panels imported successfully (direct)")
+    print("✅ Payroll panels imported successfully (from payroll_data/)")
 except ImportError as e:
-    import_error_messages.append(f"Direct import failed: {e}")
+    import_error_messages.append(f"Payroll_data directory import failed: {e}")
 
-# Strategy 2: Import from payroll directory
+# Strategy 2: Direct import (panels in current directory or already in path)
+if not PAYROLL_DATA_AVAILABLE:
+    try:
+        from payroll_main_panel import show_payroll_panel
+        from payroll_statistics_panel import show_payroll_statistics_panel  
+        from payroll_validation_panel import show_payroll_validation_panel
+        from payroll_dashboard_panel import show_payroll_dashboard_panel
+        from payroll_admin_panel import show_payroll_admin_panel
+        PAYROLL_DATA_AVAILABLE = True
+        print("✅ Payroll panels imported successfully (direct)")
+    except ImportError as e:
+        import_error_messages.append(f"Direct import failed: {e}")
+
+# Strategy 3: Import from payroll directory (OLD SYSTEM - FALLBACK)
 if not PAYROLL_DATA_AVAILABLE:
     try:
         sys.path.insert(0, payroll_path)
@@ -44,11 +59,11 @@ if not PAYROLL_DATA_AVAILABLE:
         from payroll_dashboard_panel import show_payroll_dashboard_panel
         from payroll_admin_panel import show_payroll_admin_panel
         PAYROLL_DATA_AVAILABLE = True
-        print("✅ Payroll panels imported successfully (from payroll/)")
+        print("✅ Payroll panels imported successfully (from payroll/ - fallback)")
     except ImportError as e:
         import_error_messages.append(f"Payroll directory import failed: {e}")
 
-# Strategy 3: Import from payroll_panels directory
+# Strategy 4: Import from payroll_panels directory
 if not PAYROLL_DATA_AVAILABLE:
     try:
         sys.path.insert(0, payroll_panels_path)
@@ -75,8 +90,9 @@ def render_payroll_data_management():
             st.markdown("""
             **Common issues:**
             1. Make sure the payroll panel files exist in one of these locations:
-               - `payroll/` directory (same level as app.py)
-               - `payroll_panels/` directory (same level as app.py)
+               - `payroll_data/` directory (NEW system - primary location)
+               - `payroll/` directory (OLD system - fallback)
+               - `payroll_panels/` directory (alternative location)
                - Current directory
             2. Check that all panel files exist:
                - payroll_main_panel.py
@@ -86,7 +102,24 @@ def render_payroll_data_management():
                - payroll_admin_panel.py
             3. Verify your folder structure matches one of these:
             
-            **Option 1 - Panels in payroll directory:**
+            **Option 1 - NEW system in payroll_data directory (RECOMMENDED):**
+            ```
+            your_project/
+            ├── app.py
+            ├── payroll_data_wrapper.py
+            ├── payroll/
+            │   └── (your OLD payroll system)
+            └── payroll_data/
+                ├── payroll_main_panel.py
+                ├── payroll_statistics_panel.py
+                ├── payroll_validation_panel.py
+                ├── payroll_dashboard_panel.py
+                ├── payroll_admin_panel.py
+                ├── payroll_configs/
+                └── payroll_picklists/
+            ```
+            
+            **Option 2 - Panels in payroll directory:**
             ```
             your_project/
             ├── app.py
@@ -99,22 +132,6 @@ def render_payroll_data_management():
                 ├── payroll_admin_panel.py
                 ├── payroll_configs/
                 └── payroll_picklists/
-            ```
-            
-            **Option 2 - Separate payroll_panels directory:**
-            ```
-            your_project/
-            ├── app.py
-            ├── payroll_data_wrapper.py
-            ├── payroll/
-            │   ├── payroll_configs/
-            │   └── payroll_picklists/
-            └── payroll_panels/
-                ├── payroll_main_panel.py
-                ├── payroll_statistics_panel.py
-                ├── payroll_validation_panel.py
-                ├── payroll_dashboard_panel.py
-                └── payroll_admin_panel.py
             ```
             """)
             
