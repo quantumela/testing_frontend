@@ -39,7 +39,7 @@ except ImportError as e:
         OLD_PAYROLL_AVAILABLE = True
     except ImportError:
         OLD_PAYROLL_AVAILABLE = False
-        
+
 # Hide Streamlit style (footer and hamburger menu)
 st.markdown("""
     <style>
@@ -129,38 +129,45 @@ section.main > div, .block-container {
 </style>
 """, unsafe_allow_html=True)
 
-# ✅ Background image setup with error handling
+# ✅ Background image setup with error handling and multiple path support
 def set_background(image_file):
     """Set background image with graceful fallback"""
-    try:
-        if os.path.exists(image_file):
-            with open(image_file, "rb") as f:
-                data = base64.b64encode(f.read()).decode()
-            st.markdown(f"""
-                <style>
-                    .stApp {{
-                        background: linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)),
-                                    url("data:image/jpeg;base64,{data}");
-                        background-size: cover;
-                        background-attachment: fixed;
-                        background-position: center;
-                    }}
-                </style>
-            """, unsafe_allow_html=True)
-        else:
-            # Fallback to gradient background
-            st.markdown("""
-                <style>
-                    .stApp {
-                        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-                        background-attachment: fixed;
-                    }
-                </style>
-            """, unsafe_allow_html=True)
-    except Exception as e:
-        # If any error occurs, just use the default gradient
-        print(f"Background image error: {e}")
-        pass
+    # Try multiple possible locations
+    possible_paths = [
+        image_file,
+        f"images_1/{image_file}",
+        f"images_2/{image_file}",
+    ]
+    
+    for image_path in possible_paths:
+        try:
+            if os.path.exists(image_path):
+                with open(image_path, "rb") as f:
+                    data = base64.b64encode(f.read()).decode()
+                st.markdown(f"""
+                    <style>
+                        .stApp {{
+                            background: linear-gradient(rgba(255,255,255,0.85), rgba(255,255,255,0.85)),
+                                        url("data:image/jpeg;base64,{data}");
+                            background-size: cover;
+                            background-attachment: fixed;
+                            background-position: center;
+                        }}
+                    </style>
+                """, unsafe_allow_html=True)
+                return
+        except Exception:
+            continue
+    
+    # Fallback to gradient background
+    st.markdown("""
+        <style>
+            .stApp {
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                background-attachment: fixed;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
 # Try to set background, fallback gracefully if image doesn't exist
 set_background("pexels-googledeepmind-17483873.jpg")
@@ -207,16 +214,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Helper function to display images with fallback
+# Helper function to display images with fallback and multiple path support
 def display_image(image_path, alt_text="Image", **kwargs):
     """Display image with fallback to placeholder if not found"""
-    try:
-        if os.path.exists(image_path):
-            st.image(image_path, **kwargs)
-        else:
-            st.info(f"📷 {alt_text} (Image not found: {image_path})")
-    except Exception as e:
-        st.info(f"📷 {alt_text} (Image loading error)")
+    # Try multiple possible locations for images
+    possible_paths = [
+        image_path,  # Original path
+        f"images_1/{image_path}",  # Try images_1 folder
+        f"images_2/{image_path}",  # Try images_2 folder
+    ]
+    
+    for path in possible_paths:
+        try:
+            if os.path.exists(path):
+                st.image(path, **kwargs)
+                return
+        except Exception:
+            continue
+    
+    # If no image found, show placeholder
+    st.info(f"📷 {alt_text}")
 
 # -------------------- HOME --------------------
 if selected == "Home":
@@ -290,17 +307,23 @@ if selected == "Home":
         for icon, desc in zip(icons, descriptions):
             icon_col, text_col = st.columns([1, 6])
             with icon_col:
-                try:
-                    if os.path.exists(icon):
-                        with open(icon, "rb") as f:
-                            img_data = base64.b64encode(f.read()).decode()
-                        st.markdown(
-                            f"""<img src="data:image/png;base64,{img_data}" width="40" style="margin-top:10px;">""",
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        st.markdown("📊", unsafe_allow_html=True)  # Fallback emoji
-                except:
+                # Try multiple paths for icons
+                icon_found = False
+                for icon_path in [icon, f"images_1/{icon}", f"images_2/{icon}"]:
+                    try:
+                        if os.path.exists(icon_path):
+                            with open(icon_path, "rb") as f:
+                                img_data = base64.b64encode(f.read()).decode()
+                            st.markdown(
+                                f"""<img src="data:image/png;base64,{img_data}" width="40" style="margin-top:10px;">""",
+                                unsafe_allow_html=True
+                            )
+                            icon_found = True
+                            break
+                    except:
+                        continue
+                
+                if not icon_found:
                     st.markdown("📊", unsafe_allow_html=True)  # Fallback emoji
                     
             with text_col:
