@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Union
 import io
 from datetime import datetime
+import hashlib
 
 # Configuration directories
 CONFIG_DIR = "employee_configs"
@@ -135,6 +136,94 @@ def get_default_employee_template():
         {"target_column": "BIZ_PHONE", "display_name": "Work Phone", "description": "Business phone number"},
         {"target_column": "MANAGER", "display_name": "Manager", "description": "Employee's supervisor"}
     ]
+
+def check_admin_password() -> bool:
+    """Check if admin password is correct"""
+    # Initialize admin session state
+    if 'employee_admin_authenticated' not in st.session_state:
+        st.session_state.employee_admin_authenticated = False
+    
+    # If already authenticated, return True
+    if st.session_state.employee_admin_authenticated:
+        return True
+    
+    # Get password from secrets or use default
+    try:
+        correct_password = st.secrets.get("employee_admin_password", "admin123")
+    except:
+        correct_password = "admin123"  # Fallback if secrets not available
+    
+    # Show password input
+    st.markdown("""
+    <div style="background: linear-gradient(90deg, #dc2626 0%, #ef4444 100%); 
+                color: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem;">
+        <h1 style="margin: 0; font-size: 2.5rem;">🔐 Admin Access Required</h1>
+        <p style="margin: 0.5rem 0 0 0; font-size: 1.2rem; opacity: 0.9;">
+            Enter the admin password to access Employee Configuration Center
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Password input
+    password_input = st.text_input(
+        "🔑 **Admin Password:**",
+        type="password",
+        placeholder="Enter admin password...",
+        help="Contact your system administrator if you don't have the password"
+    )
+    
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        if st.button("🔓 **Access Admin**", type="primary"):
+            if password_input == correct_password:
+                st.session_state.employee_admin_authenticated = True
+                st.success("✅ Access granted! Refreshing...")
+                st.rerun()
+            else:
+                st.error("❌ Invalid password")
+                st.warning("Please check your password and try again")
+    
+    with col2:
+        if st.button("🔄 **Clear**"):
+            st.rerun()
+    
+    with col3:
+        st.info("💡 **Default password:** admin123 (if not configured)")
+    
+    # Security notice
+    st.markdown("---")
+    st.markdown("""
+    ### 🛡️ Security Notice
+    
+    **What this protects:** The Employee Configuration Center contains sensitive settings that control how your PA files are processed into employee data.
+    
+    **Why password protection:** 
+    - Prevents accidental changes to critical mappings
+    - Ensures only authorized users can modify employee data templates
+    - Protects configuration integrity
+    
+    **For Administrators:**
+    - Password can be configured in Streamlit secrets as `employee_admin_password`
+    - Use a strong password in production environments
+    - Regularly review who has admin access
+    """)
+    
+    return False
+
+def show_logout_option():
+    """Show logout option for admin users"""
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**🔐 Admin Session**")
+    
+    if st.sidebar.button("🚪 **Logout from Admin**", help="Exit admin mode"):
+        st.session_state.employee_admin_authenticated = False
+        st.success("✅ Logged out successfully")
+        st.rerun()
+    
+    # Show current session info
+    st.sidebar.caption("🟢 Admin access active")
+    st.sidebar.caption("⚠️ Be careful with configuration changes")
 
 def show_configuration_status():
     """Show current configuration status in simple terms"""
@@ -574,9 +663,16 @@ def quick_setup_wizard():
         st.write(f"• **Field Mappings:** {len(mappings)} mappings created")
 
 def show_employee_admin_panel():
-    """Main admin panel with clean, simple interface"""
+    """Main admin panel with password protection and clean interface"""
     
-    # Clean header
+    # Check admin authentication first
+    if not check_admin_password():
+        return  # Exit if not authenticated
+    
+    # Show logout option in sidebar
+    show_logout_option()
+    
+    # Clean header for authenticated users
     st.markdown("""
     <div style="background: linear-gradient(90deg, #1f2937 0%, #374151 100%); 
                 color: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem;">
