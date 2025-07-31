@@ -8,72 +8,122 @@ import sys
 import streamlit as st
 import pandas as pd
 
+print("🔍 Foundation wrapper starting...")
+
 # Add the foundation paths - try multiple locations
 current_dir = os.path.dirname(__file__)
-foundation_module_path = os.path.join(current_dir, 'foundation_module')
 foundation_data_path = os.path.join(current_dir, 'foundation_data')
-foundation_panels_path = os.path.join(current_dir, 'foundation_panels')
+foundation_module_path = os.path.join(current_dir, 'foundation_module')
+
+print(f"🔍 Current dir: {current_dir}")
+print(f"🔍 Foundation data path: {foundation_data_path}")
+print(f"🔍 Foundation data exists: {os.path.exists(foundation_data_path)}")
 
 # Add paths to sys.path if they don't exist
-paths_to_add = [foundation_data_path, foundation_module_path, foundation_panels_path]
+paths_to_add = [foundation_data_path, foundation_module_path]
 for path in paths_to_add:
     if os.path.exists(path) and path not in sys.path:
         sys.path.insert(0, path)
+        print(f"✅ Added to sys.path: {path}")
+
+# Check what's actually in the foundation_data directory
+if os.path.exists(foundation_data_path):
+    try:
+        contents = os.listdir(foundation_data_path)
+        print(f"🔍 Foundation_data contents: {contents}")
+        
+        panels_path = os.path.join(foundation_data_path, 'panels')
+        if os.path.exists(panels_path):
+            panels_contents = os.listdir(panels_path)
+            print(f"🔍 Panels folder contents: {panels_contents}")
+        else:
+            print("❌ Panels folder not found")
+    except Exception as e:
+        print(f"❌ Error reading foundation_data: {e}")
 
 # Import the foundation data management panels - try multiple import strategies
 FOUNDATION_DATA_AVAILABLE = False
+VALIDATION_ENHANCED = False
+STATISTICS_ENHANCED = False
+HEALTH_MONITOR_ENHANCED = False
 import_error_messages = []
 
 # Strategy 1: Import from foundation_data directory (NEW SYSTEM - PRIORITY)
+print("🔍 Trying Strategy 1: Import from foundation_data directory...")
 try:
-    sys.path.insert(0, foundation_data_path)
+    # Add foundation_data to path if not already there
+    if foundation_data_path not in sys.path:
+        sys.path.insert(0, foundation_data_path)
+    
+    print("🔍 Attempting to import hierarchy panel...")
     from panels.hierarchy_panel_fixed import show_hierarchy_panel
+    print("✅ Hierarchy panel imported successfully")
     
     # Import enhanced validation panel with fallback
+    print("🔍 Attempting to import validation panels...")
     try:
         from panels.enhanced_validation_panel import show_validation_panel
         VALIDATION_ENHANCED = True
-    except ImportError:
+        print("✅ Enhanced validation panel imported")
+    except ImportError as ve:
+        print(f"⚠️ Enhanced validation failed: {ve}")
         try:
             from panels.validation_panel_fixed import show_validation_panel
             VALIDATION_ENHANCED = False
-        except ImportError:
+            print("✅ Basic validation panel imported")
+        except ImportError as ve2:
+            print(f"⚠️ Basic validation failed: {ve2}")
             def show_validation_panel(state):
                 st.error("Validation panel not implemented yet")
             VALIDATION_ENHANCED = False
 
     # Import admin panel with fallbacks
+    print("🔍 Attempting to import admin panel...")
     try:
         from config_manager import show_admin_panel
-    except ImportError:
+        print("✅ Admin panel imported from config_manager")
+    except ImportError as ae:
+        print(f"⚠️ Config_manager import failed: {ae}")
         try:
             from panels.config_manager import show_admin_panel
-        except ImportError:
+            print("✅ Admin panel imported from panels.config_manager")
+        except ImportError as ae2:
+            print(f"⚠️ Panels.config_manager import failed: {ae2}")
             def show_admin_panel():
                 st.error("Admin panel not found")
 
     # Import enhanced statistics panel with fallbacks
+    print("🔍 Attempting to import statistics panels...")
     try:
         from panels.statistics_panel_enhanced import show_statistics_panel
         STATISTICS_ENHANCED = True
-    except ImportError:
+        print("✅ Enhanced statistics panel imported")
+    except ImportError as se:
+        print(f"⚠️ Enhanced statistics failed: {se}")
         try:
             from panels.statistics_panel import show_statistics_panel
             STATISTICS_ENHANCED = False
-        except ImportError:
+            print("✅ Basic statistics panel imported")
+        except ImportError as se2:
+            print(f"⚠️ Basic statistics failed: {se2}")
             def show_statistics_panel(state):
                 st.error("Statistics panel not implemented yet")
             STATISTICS_ENHANCED = False
 
     # Import health monitor (dashboard) panel with fallbacks
+    print("🔍 Attempting to import health monitor panels...")
     try:
         from panels.dashboard_panel_fixed import show_health_monitor_panel
         HEALTH_MONITOR_ENHANCED = True
-    except ImportError:
+        print("✅ Enhanced health monitor panel imported")
+    except ImportError as he:
+        print(f"⚠️ Enhanced health monitor failed: {he}")
         try:
             from panels.dashboard_panel import show_health_monitor_panel
             HEALTH_MONITOR_ENHANCED = False
-        except ImportError:
+            print("✅ Basic health monitor panel imported")
+        except ImportError as he2:
+            print(f"⚠️ Basic health monitor failed: {he2}")
             def show_health_monitor_panel(state):
                 st.error("Health Monitor panel not implemented yet")
             HEALTH_MONITOR_ENHANCED = False
@@ -82,13 +132,17 @@ try:
     print("✅ Foundation panels imported successfully (from foundation_data/)")
     
 except ImportError as e:
-    import_error_messages.append(f"Foundation_data directory import failed: {e}")
+    error_msg = f"Foundation_data directory import failed: {e}"
+    import_error_messages.append(error_msg)
+    print(f"❌ {error_msg}")
 
 # Strategy 2: Import from foundation_module directory (EXISTING SYSTEM)
 if not FOUNDATION_DATA_AVAILABLE:
+    print("🔍 Trying Strategy 2: Import from foundation_module directory...")
     try:
-        sys.path.insert(0, foundation_module_path)
-        # This would be your existing foundation system
+        if foundation_module_path not in sys.path:
+            sys.path.insert(0, foundation_module_path)
+        
         from foundation_app import render as render_foundation_basic
         
         # Create wrapper functions for the basic system
@@ -114,12 +168,16 @@ if not FOUNDATION_DATA_AVAILABLE:
         print("✅ Foundation basic system imported (from foundation_module/)")
         
     except ImportError as e:
-        import_error_messages.append(f"Foundation_module directory import failed: {e}")
+        error_msg = f"Foundation_module directory import failed: {e}"
+        import_error_messages.append(error_msg)
+        print(f"❌ {error_msg}")
 
 if not FOUNDATION_DATA_AVAILABLE:
     print(f"❌ All foundation import strategies failed:")
     for msg in import_error_messages:
         print(f"  - {msg}")
+else:
+    print(f"✅ Foundation system ready! Enhanced features: Validation={VALIDATION_ENHANCED}, Statistics={STATISTICS_ENHANCED}, Health={HEALTH_MONITOR_ENHANCED}")
 
 def get_default_level_names():
     """Get improved default level names"""
@@ -150,42 +208,64 @@ def render_foundation_data_management():
     """Render the complete foundation data management system"""
     if not FOUNDATION_DATA_AVAILABLE:
         st.error("❌ Foundation Data Management system not available.")
-        with st.expander("🔍 Troubleshooting", expanded=False):
+        
+        # Show debug information
+        st.markdown("### 🔍 Debug Information")
+        st.write(f"**Foundation data path exists:** {os.path.exists(foundation_data_path)}")
+        st.write(f"**Foundation module path exists:** {os.path.exists(foundation_module_path)}")
+        
+        with st.expander("🔍 Detailed Troubleshooting", expanded=True):
             st.markdown("""
             **Common issues:**
-            1. Make sure the foundation panel files exist in one of these locations:
-               - `foundation_data/` directory (NEW system - primary location)
-               - `foundation_module/` directory (EXISTING system - fallback)
-               - `foundation_panels/` directory (alternative location)
-            2. Check that required panel files exist:
-               - panels/hierarchy_panel_fixed.py
-               - panels/enhanced_validation_panel.py (or validation_panel_fixed.py)
-               - panels/statistics_panel_enhanced.py (or statistics_panel.py)
-               - panels/dashboard_panel_fixed.py (or dashboard_panel.py)
-               - config_manager.py
-            3. Verify your folder structure matches one of these:
+            1. Make sure the foundation panel files exist in the `foundation_data/panels/` directory
+            2. Check that required panel files exist and have the correct names
+            3. Verify there are no syntax errors in the panel files
             
-            **Option 1 - NEW enhanced system (RECOMMENDED):**
-            ```
-            your_project/
-            ├── app.py
-            ├── foundation_data_wrapper.py
-            ├── foundation_module/
-            │   └── (your EXISTING foundation system)
-            └── foundation_data/
-                ├── main_app.py
-                ├── config_manager.py
-                ├── panels/
-                │   ├── hierarchy_panel_fixed.py
-                │   ├── enhanced_validation_panel.py
-                │   ├── statistics_panel_enhanced.py
-                │   ├── dashboard_panel_fixed.py
-                │   └── validation_panel_fixed.py
-                ├── configs/
-                ├── source_samples/
-                └── utils/
-            ```
+            **Expected files in `foundation_data/panels/`:**
+            - `hierarchy_panel_fixed.py` ✅ (required)
+            - `enhanced_validation_panel.py` (optional, falls back to basic)
+            - `validation_panel_fixed.py` (fallback for validation)
+            - `statistics_panel_enhanced.py` (optional, falls back to basic)
+            - `statistics_panel.py` (fallback for statistics)
+            - `dashboard_panel_fixed.py` (optional, falls back to basic)
+            - `dashboard_panel.py` (fallback for health monitor)
             """)
+            
+            # Show what we actually found
+            if os.path.exists(foundation_data_path):
+                st.write("**Foundation_data directory contents:**")
+                try:
+                    contents = os.listdir(foundation_data_path)
+                    st.code(str(contents))
+                    
+                    panels_path = os.path.join(foundation_data_path, 'panels')
+                    if os.path.exists(panels_path):
+                        st.write("**Panels directory contents:**")
+                        panels_contents = os.listdir(panels_path)
+                        st.code(str(panels_contents))
+                        
+                        # Check for specific required files
+                        required_files = [
+                            'hierarchy_panel_fixed.py',
+                            'validation_panel_fixed.py', 
+                            'enhanced_validation_panel.py',
+                            'statistics_panel.py',
+                            'statistics_panel_enhanced.py',
+                            'dashboard_panel.py',
+                            'dashboard_panel_fixed.py'
+                        ]
+                        
+                        st.write("**Required file check:**")
+                        for file in required_files:
+                            file_path = os.path.join(panels_path, file)
+                            if os.path.exists(file_path):
+                                st.success(f"✅ {file}")
+                            else:
+                                st.error(f"❌ {file}")
+                    else:
+                        st.error("❌ Panels directory not found!")
+                except Exception as e:
+                    st.error(f"Error reading directory: {e}")
             
             # Show detailed error information
             st.markdown("**Import Error Details:**")
