@@ -39,7 +39,22 @@ except ImportError as e:
         OLD_PAYROLL_AVAILABLE = True
     except ImportError:
         OLD_PAYROLL_AVAILABLE = False
+# Add this debug section right after your imports and before the "Hide Streamlit style" section:
 
+# DEBUG: Show wrapper status
+st.write("🔧 **Debug Info:**")
+st.write(f"Foundation wrapper available: {FOUNDATION_WRAPPER_AVAILABLE}")
+st.write(f"Employee wrapper available: {EMPLOYEE_WRAPPER_AVAILABLE}")  
+st.write(f"Payroll wrapper available: {PAYROLL_WRAPPER_AVAILABLE}")
+
+if not FOUNDATION_WRAPPER_AVAILABLE:
+    st.error("Foundation wrapper failed to import - using fallback system")
+if not EMPLOYEE_WRAPPER_AVAILABLE:
+    st.error("Employee wrapper failed to import")
+if not PAYROLL_WRAPPER_AVAILABLE:
+    st.error("Payroll wrapper failed to import")
+
+# Remove this debug code once everything is working
 # Hide Streamlit style (footer and hamburger menu)
 st.markdown("""
     <style>
