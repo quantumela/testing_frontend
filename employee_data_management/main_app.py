@@ -78,7 +78,7 @@ try:
     elif panel == "📈 Dashboard":
         show_employee_dashboard_panel(state)
     elif panel == "⚙️ Admin Configuration":
-        show_employee_admin_panel()
+        show_protected_employee_panel()
 
 except Exception as e:
     st.error(f"❌ **Panel Error:** {str(e)}")
