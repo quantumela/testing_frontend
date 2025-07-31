@@ -129,13 +129,29 @@ def render_foundation_data_management():
             show_statistics_panel(foundation_state)
         elif panel_choice == "🏥 Health Monitor":
             show_health_monitor_panel(foundation_state)
+        # Replace the admin configuration section in your foundation_data_wrapper.py:
+        
         elif panel_choice == "⚙️ Admin Configuration":
-            foundation_state['admin_mode'] = st.checkbox("Enable Admin Mode")
-            if foundation_state['admin_mode']:
-                show_admin_panel()
-            else:
-                st.info("Enable admin mode to access configuration options.")
+            st.markdown("### Admin Configuration")
+            
+            # Simplified admin mode - no password required for now
+            admin_enabled = st.checkbox("Enable Admin Mode", help="Enable configuration options")
+            
+            if admin_enabled:
+                foundation_state['admin_mode'] = True
+                st.success("✅ Admin mode activated for Foundation")
                 
+                # Add admin warning
+                st.warning("⚠️ Admin mode: Use carefully as changes affect system behavior")
+                
+                try:
+                    show_admin_panel()
+                except Exception as e:
+                    st.error(f"Admin panel error: {str(e)}")
+                    st.info("Admin panel may not be fully configured yet")
+            else:
+                foundation_state['admin_mode'] = False
+                st.info("💡 Enable admin mode to access advanced configuration options.")
     except Exception as e:
         st.error(f"❌ Panel Error: {str(e)}")
         st.info("Try refreshing the page or switching to a different panel")
