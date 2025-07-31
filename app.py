@@ -2,8 +2,21 @@ import os, sys
 import streamlit as st
 import base64
 from streamlit_option_menu import option_menu
-from foundation_module.foundation_app import render as render_foundation
 from employee_app import render_employee_tool
+
+# Import the foundation data management wrapper
+try:
+    from foundation_data_wrapper import render_foundation_data_management, get_foundation_system_status
+    FOUNDATION_WRAPPER_AVAILABLE = True
+except ImportError as e:
+    FOUNDATION_WRAPPER_AVAILABLE = False
+    print(f"Foundation wrapper not available: {e}")
+    # Fallback to old foundation system
+    try:
+        from foundation_module.foundation_app import render as render_foundation
+        OLD_FOUNDATION_AVAILABLE = True
+    except ImportError:
+        OLD_FOUNDATION_AVAILABLE = False
 
 # Import the employee data management wrapper
 try:
@@ -380,14 +393,23 @@ elif selected == "Launch Demo":
                 with st.expander("ℹ️ Details"):
                     st.markdown(detail_text)
         
-        # Foundation Data
-        migration_row("Foundation Data", "fd_demo", "- Legal Entity\n- Job Classification\n- Location\n- Org Units\n...", next_page="foundation_data_view")
+        # Foundation Data - NEW ENHANCED VERSION
+        foundation_label = "Foundation Data Management" if FOUNDATION_WRAPPER_AVAILABLE else "Foundation Data"
+        foundation_details = ("**🆕 Enhanced Foundation Data System**\n\n" +
+                             "- **Hierarchy Processing:** HRP1000 (Objects) & HRP1001 (Relationships) files\n" +
+                             "- **Advanced Validation:** Complete organizational hierarchy validation\n" +
+                             "- **Statistics & Analytics:** Organizational structure analysis and insights\n" +
+                             "- **Health Monitor:** Real-time system health and migration progress\n" +
+                             "- **Admin Configuration:** Level naming, mapping rules, and advanced settings\n\n" +
+                             "*Comprehensive organizational hierarchy migration suite with enhanced analytics*") if FOUNDATION_WRAPPER_AVAILABLE else "- Legal Entity\n- Job Classification\n- Location\n- Org Units\n..."
+        
+        migration_row(foundation_label, "fd_demo", foundation_details, next_page="foundation_data_view")
 
         # Time Data — disabled
         migration_row("Time Data", "td_demo_disabled", "- Time Type\n- Accruals\n- Time Accounts\n- Absences\n...", enabled=False)
 
         # Payroll Data - NEW ENHANCED VERSION
-        payroll_label = "Employee Data – Payroll" if PAYROLL_WRAPPER_AVAILABLE else "Payroll Data"
+        payroll_label = "Payroll Data Management" if PAYROLL_WRAPPER_AVAILABLE else "Payroll Data"
         payroll_details = ("**🆕 Enhanced Payroll Data System**\n\n" +
                           "- **Processing:** PA0008 (Basic Pay) & PA0014 (Recurring Payments) files\n" +
                           "- **Statistics & Analytics:** Wage type analysis and payroll insights\n" +
@@ -450,8 +472,21 @@ elif selected == "Launch Demo":
                 st.session_state.demo_page = "sap_to_sf"
                 st.rerun()
     
-        st.markdown("### Foundation Data – Interactive View")
-        render_foundation()
+        # Render the enhanced foundation system or fallback to old one
+        if FOUNDATION_WRAPPER_AVAILABLE:
+            render_foundation_data_management()
+        else:
+            # Fallback to old foundation system
+            try:
+                if 'OLD_FOUNDATION_AVAILABLE' in globals() and OLD_FOUNDATION_AVAILABLE:
+                    st.markdown("### Foundation Data – Interactive View")
+                    render_foundation()
+                else:
+                    st.error("❌ Foundation system not available.")
+                    st.info("Please check your foundation installation and try again.")
+            except Exception as e:
+                st.error("❌ Foundation system not available.")
+                st.info("Please check your foundation installation and try again.")
 
     # NEW: Employee Data Management System
     elif st.session_state.demo_page == "employee_data_management":
@@ -518,7 +553,20 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
                 if st.button("Foundation Data", key="fd_btn"):
                     st.session_state.show_fd = not st.session_state.show_fd
                 if st.session_state.show_fd:
-                    st.info("""
+                    if FOUNDATION_WRAPPER_AVAILABLE:
+                        st.info("""
+**Enhanced Foundation Processing:**
+- HRP1000 (Objects) & HRP1001 (Relationships) Processing
+- Advanced Organizational Hierarchy Analysis
+- Multi-Level Structure Validation (Legal Entity → Team)
+- Circular Reference Detection & Resolution
+- Enhanced Statistics & Pipeline Analysis
+- Real-Time Health Monitoring
+- Admin Configuration & Level Naming
+- Complete Data Lineage Tracking
+                        """)
+                    else:
+                        st.info("""
 - Org Hierarchy  
 - Cost Center  
 - Location  
@@ -526,7 +574,7 @@ A secure, scalable, audit-ready solution for migrating HR data across SAP On-Pre
 - Job Classification  
 - Work Schedule
 - Position Data
-                    """)
+                        """)
 
                 if st.button("Employee Data", key="pd_btn"):
                     st.session_state.show_pd = not st.session_state.show_pd
