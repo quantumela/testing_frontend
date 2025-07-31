@@ -1,649 +1,664 @@
+"""
+Protected Payroll Admin Panel
+Provides secure admin configuration for Payroll Data Management
+"""
+
 import streamlit as st
 import pandas as pd
-import numpy as np
-import os
 import json
+import os
 from pathlib import Path
-from typing import List, Dict, Optional, Union
-import io
-from datetime import datetime
+from typing import Dict, List, Optional, Any
+from admin_auth import create_payroll_admin
 
 # Configuration directories
 CONFIG_DIR = "payroll_configs"
-PICKLIST_DIR = "payroll_picklists"
-SOURCE_SAMPLES_DIR = "payroll_source_samples"
-MAX_SAMPLE_ROWS = 1000
+TEMPLATE_DIR = "payroll_templates"
+WAGE_TYPE_DIR = "wage_type_configs"
 
-def initialize_directories() -> None:
+def initialize_payroll_directories():
     """Create required directories if they don't exist"""
-    for directory in [CONFIG_DIR, PICKLIST_DIR, SOURCE_SAMPLES_DIR]:
+    for directory in [CONFIG_DIR, TEMPLATE_DIR, WAGE_TYPE_DIR]:
         Path(directory).mkdir(exist_ok=True)
 
-def get_payroll_source_columns(source_file: str) -> List[str]:
-    """Get available columns from payroll source files"""
+def save_payroll_config(config_type: str, config_data: Any) -> None:
+    """Save payroll configuration to file"""
     try:
-        sample_path = os.path.join(SOURCE_SAMPLES_DIR, f"{source_file}_sample.csv")
-        if os.path.exists(sample_path):
-            df = pd.read_csv(sample_path, nrows=1)
-            return df.columns.tolist()
-    except Exception as e:
-        st.error(f"Error loading source columns: {str(e)}")
-    
-    # Fallback to standard PA file columns for payroll
-    standard_columns = {
-        "PA0008": ["Pers.No.", "Wage Type", "Amount", "Currency", "Pay Period", "Payment Date", 
-                   "Cost Center", "Status", "Overtime Hours", "Regular Hours", "Bonus Type",
-                   "Tax Code", "Gross Amount", "Net Amount", "Start Date", "End Date"],
-        "PA0014": ["Pers.No.", "Recurring Amount", "Deduction Type", "Benefit Type", "Frequency",
-                   "Start Date", "End Date", "Annual Amount", "Monthly Amount", "Percentage",
-                   "Maximum Amount", "Status", "Priority", "Tax Treatment"]
-    }
-    
-    return standard_columns.get(source_file, [])
-
-def save_config_with_session_state(config_type: str, config_data: Union[Dict, List]) -> None:
-    """Save configuration to both file and session state"""
-    
-    # Save to file
-    save_config(config_type, config_data)
-    
-    # Also save to session state for immediate access
-    if config_type == "payroll_column_mappings":
-        if isinstance(config_data, list):
-            mapping_df = pd.DataFrame(config_data)
-        else:
-            mapping_df = config_data
-            
-        # Save to multiple session state keys for compatibility
-        st.session_state['payroll_mapping_config'] = mapping_df
-        st.session_state['payroll_current_mappings'] = mapping_df
-        st.session_state['payroll_admin_mappings'] = mapping_df
-        
-        st.success("✅ Payroll configuration saved and ready to use!")
-        
-    elif config_type == "payroll_template":
-        st.session_state['payroll_template_config'] = config_data
-        st.success("✅ Payroll template saved!")
-
-def load_config_with_session_state(config_type: str) -> Optional[Union[Dict, List]]:
-    """Load configuration from session state first, then fall back to file"""
-    
-    if config_type == "payroll_column_mappings":
-        # Check session state first
-        if 'payroll_mapping_config' in st.session_state:
-            config_data = st.session_state['payroll_mapping_config']
-            if isinstance(config_data, pd.DataFrame):
-                return config_data.to_dict('records')
-            return config_data
-    
-    # Fall back to file-based loading
-    return load_config(config_type)
-
-def save_config(config_type: str, config_data: Union[Dict, List]) -> None:
-    """Save configuration to file"""
-    try:
-        config_path = f"{CONFIG_DIR}/{config_type}_config.json"
+        config_path = os.path.join(CONFIG_DIR, f"{config_type}_config.json")
         with open(config_path, "w") as f:
             json.dump(config_data, f, indent=2)
+        st.success(f"✅ {config_type.title()} configuration saved!")
     except Exception as e:
-        st.error(f"Error saving config: {str(e)}")
+        st.error(f"❌ Error saving config: {str(e)}")
 
-def load_config(config_type: str) -> Optional[Union[Dict, List]]:
-    """Load configuration from file"""
+def load_payroll_config(config_type: str) -> Optional[Any]:
+    """Load payroll configuration from file"""
     try:
-        config_path = f"{CONFIG_DIR}/{config_type}_config.json"
+        config_path = os.path.join(CONFIG_DIR, f"{config_type}_config.json")
         if not os.path.exists(config_path):
             return None
-            
         with open(config_path, "r") as f:
-            data = json.load(f)
-            return data
+            return json.load(f)
     except Exception as e:
-        st.error(f"Error loading config: {str(e)}")
+        st.error(f"❌ Error loading config: {str(e)}")
         return None
 
-def get_simple_transformation_options():
-    """Get simple transformation options for payroll data"""
+def get_default_wage_types():
+    """Get default wage type mappings"""
     return {
-        "None": "Use data as-is",
-        "Number Format": "Format as decimal (123.45)",
-        "Currency Format": "Format as currency ($123.45)",
-        "Date Format (YYYY-MM-DD)": "Convert dates to standard format",
-        "Date Format (YYYY-MM)": "Convert to month format (for pay periods)",
-        "UPPERCASE": "All capital letters (USD, ACTIVE)",
-        "Title Case": "Proper capitalization (Regular Pay)",
-        "lowercase": "All small letters (bonus)",
-        "Trim Whitespace": "Remove extra spaces",
-        "Status Mapping": "Convert status codes to readable text",
-        "Wage Type Mapping": "Convert wage type codes to descriptions"
+        "1000": {"name": "Basic Pay", "category": "regular", "taxable": True},
+        "1010": {"name": "Overtime Pay", "category": "overtime", "taxable": True},
+        "1020": {"name": "Holiday Pay", "category": "premium", "taxable": True},
+        "2000": {"name": "Health Insurance", "category": "benefit", "taxable": False},
+        "2010": {"name": "Retirement Contribution", "category": "benefit", "taxable": False},
+        "3000": {"name": "Federal Tax", "category": "deduction", "taxable": False},
+        "3010": {"name": "State Tax", "category": "deduction", "taxable": False},
+        "3020": {"name": "Social Security", "category": "deduction", "taxable": False},
+        "4000": {"name": "Bonus", "category": "bonus", "taxable": True},
+        "9000": {"name": "Other Pay", "category": "other", "taxable": True}
     }
 
-def get_default_payroll_template():
-    """Get the standard payroll data template"""
-    return [
-        {"target_column": "EMPLOYEE_ID", "display_name": "Employee ID", "description": "Unique identifier for each employee"},
-        {"target_column": "WAGE_TYPE", "display_name": "Wage Type", "description": "Type of payment (salary, bonus, overtime)"},
-        {"target_column": "AMOUNT", "display_name": "Amount", "description": "Payment amount"},
-        {"target_column": "CURRENCY", "display_name": "Currency", "description": "Currency code (USD, EUR, etc.)"},
-        {"target_column": "PAY_PERIOD", "display_name": "Pay Period", "description": "Period this payment covers"},
-        {"target_column": "PAYMENT_DATE", "display_name": "Payment Date", "description": "When the payment was made"},
-        {"target_column": "RECURRING_AMOUNT", "display_name": "Recurring Amount", "description": "Regular recurring payments/deductions"},
-        {"target_column": "DEDUCTION_TYPE", "display_name": "Deduction Type", "description": "Type of deduction (tax, insurance, etc.)"},
-        {"target_column": "STATUS", "display_name": "Status", "description": "Payment status (processed, pending, etc.)"},
-        {"target_column": "COST_CENTER", "display_name": "Cost Center", "description": "Accounting cost center"},
-        {"target_column": "GROSS_AMOUNT", "display_name": "Gross Amount", "description": "Amount before deductions"},
-        {"target_column": "NET_AMOUNT", "display_name": "Net Amount", "description": "Amount after deductions"},
-        {"target_column": "TAX_CODE", "display_name": "Tax Code", "description": "Tax classification code"}
-    ]
-
-def show_configuration_status():
+def show_payroll_configuration_status():
     """Show current payroll configuration status"""
     st.subheader("📋 Payroll Configuration Status")
-    st.info("**What this shows:** Whether your payroll data configuration is ready to use")
+    st.info("**What this shows:** Current status of your Payroll Data Management configuration")
     
-    # Check what's configured
-    template = load_config("payroll_template")
-    mappings = load_config("payroll_column_mappings")
+    # Check configurations
+    wage_type_config = load_payroll_config("wage_types")
+    validation_config = load_payroll_config("validation_rules")
+    processing_config = load_payroll_config("processing_settings")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if template:
-            st.success("✅ **Payroll Template**")
-            st.caption(f"{len(template)} fields configured")
+        if wage_type_config:
+            st.success("✅ **Wage Type Mappings**")
+            st.caption(f"{len(wage_type_config)} wage types configured")
         else:
-            st.error("❌ **Payroll Template**")
-            st.caption("Not set up yet")
+            st.warning("⚠️ **Wage Type Mappings**")
+            st.caption("Using system defaults")
     
     with col2:
-        if mappings:
-            st.success("✅ **Field Mappings**")
-            st.caption(f"{len(mappings)} mappings created")
+        if validation_config:
+            st.success("✅ **Validation Rules**")
+            st.caption(f"{len(validation_config.get('rules', []))} rules active")
         else:
-            st.error("❌ **Field Mappings**")
-            st.caption("Not configured yet")
+            st.error("❌ **Validation Rules**")
+            st.caption("Using basic validation")
     
     with col3:
-        # Check if sample files exist
-        sample_files = 0
-        for pa_file in ['PA0008', 'PA0014']:
-            sample_path = os.path.join(SOURCE_SAMPLES_DIR, f"{pa_file}_sample.csv")
-            if os.path.exists(sample_path):
-                sample_files += 1
-        
-        if sample_files > 0:
-            st.success(f"✅ **Sample Files**")
-            st.caption(f"{sample_files}/2 files uploaded")
+        if processing_config:
+            st.success("✅ **Processing Settings**")
+            st.caption("Custom settings active")
         else:
-            st.warning("⚪ **Sample Files**")
-            st.caption("None uploaded yet")
+            st.warning("⚠️ **Processing Settings**")
+            st.caption("Using defaults")
     
-    # Overall readiness
-    if template and mappings:
-        st.success("🎉 **Configuration Complete!** Ready to process payroll data")
-    elif template or mappings:
-        st.warning("⚠️ **Configuration Partial** - Some setup still needed")
+    # Overall status
+    config_count = sum(1 for config in [wage_type_config, validation_config, processing_config] if config)
+    if config_count == 3:
+        st.success("🎉 **Payroll Configuration Complete!**")
+    elif config_count > 0:
+        st.warning(f"⚠️ **Configuration Partial** - {config_count}/3 components configured")
     else:
-        st.info("ℹ️ **Configuration Not Started** - Follow the setup steps below")
+        st.info("ℹ️ **Configuration Not Started** - Using system defaults")
 
-def upload_sample_files():
-    """Handle sample file uploads for payroll with simple explanations"""
-    st.subheader("📂 Upload Payroll Sample Files")
-    st.info("**What this does:** Upload small samples of your PA files so we can see what payroll data fields are available")
+def configure_wage_types():
+    """Configure wage type mappings and categories"""
+    st.subheader("💰 Wage Type Configuration")
+    st.info("**What this does:** Define how wage types from PA0008 and PA0014 should be interpreted and categorized")
     
-    # Select file type
-    file_type = st.selectbox(
-        "Which type of payroll file are you uploading?",
-        ["PA0008 (Wage Types)", "PA0014 (Recurring Elements)"],
-        help="Choose the type that matches your file"
+    # Load current wage types or use defaults
+    current_wage_types = load_payroll_config("wage_types") or get_default_wage_types()
+    
+    st.markdown("### 📋 Current Wage Type Mappings")
+    
+    # Convert to DataFrame for easier editing
+    wage_type_rows = []
+    for code, info in current_wage_types.items():
+        wage_type_rows.append({
+            "Wage Type Code": code,
+            "Name": info.get("name", ""),
+            "Category": info.get("category", "other"),
+            "Taxable": info.get("taxable", True),
+            "Description": info.get("description", "")
+        })
+    
+    # Show current mappings in editable form
+    if wage_type_rows:
+        wage_type_df = pd.DataFrame(wage_type_rows)
+        
+        # Show current mappings
+        st.dataframe(wage_type_df, use_container_width=True)
+        
+        # Download current mappings
+        csv_data = wage_type_df.to_csv(index=False)
+        st.download_button(
+            "📥 Download Current Wage Types",
+            data=csv_data,
+            file_name="wage_type_mappings.csv",
+            mime="text/csv"
+        )
+    
+    # Add new wage type
+    st.markdown("### ➕ Add New Wage Type")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        new_code = st.text_input(
+            "Wage Type Code:",
+            placeholder="e.g., 5000",
+            help="4-digit code from your PA files"
+        )
+        
+        new_name = st.text_input(
+            "Display Name:",
+            placeholder="e.g., Commission Pay",
+            help="Human-readable name"
+        )
+    
+    with col2:
+        category_options = ["regular", "overtime", "premium", "bonus", "benefit", "deduction", "other"]
+        new_category = st.selectbox(
+            "Category:",
+            category_options,
+            help="Type of wage/deduction"
+        )
+        
+        new_taxable = st.checkbox(
+            "Taxable",
+            value=True,
+            help="Is this wage type subject to taxes?"
+        )
+    
+    with col3:
+        new_description = st.text_area(
+            "Description:",
+            placeholder="Optional description...",
+            height=100,
+            help="Additional details about this wage type"
+        )
+    
+    if st.button("➕ Add Wage Type", type="primary"):
+        if new_code and new_name:
+            current_wage_types[new_code] = {
+                "name": new_name,
+                "category": new_category,
+                "taxable": new_taxable,
+                "description": new_description
+            }
+            save_payroll_config("wage_types", current_wage_types)
+            st.success(f"✅ Added wage type: {new_code} - {new_name}")
+            st.rerun()
+        else:
+            st.error("❌ Please provide both code and name")
+    
+    # Bulk upload wage types
+    st.markdown("### 📤 Bulk Upload Wage Types")
+    
+    upload_file = st.file_uploader(
+        "Upload Wage Type CSV:",
+        type=['csv'],
+        help="CSV with columns: Wage Type Code, Name, Category, Taxable, Description"
     )
     
-    # Extract PA code
-    pa_code = file_type.split()[0]  # Gets PA0008, PA0014
-    
-    # File descriptions
-    descriptions = {
-        "PA0008": "Contains wage types, salary amounts, bonuses, overtime, and payment information",
-        "PA0014": "Contains recurring payments and deductions like benefits, taxes, and regular allowances"
-    }
-    
-    st.write(f"**{pa_code}:** {descriptions.get(pa_code, 'Payroll data file')}")
-    
-    # File upload
-    uploaded_file = st.file_uploader(
-        f"Upload your {pa_code} sample file:",
-        type=['csv', 'xlsx', 'xls'],
-        help="Upload a small sample (first 1000 rows is enough)"
-    )
-    
-    if uploaded_file:
+    if upload_file:
         try:
-            # Read the file
-            if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file, nrows=MAX_SAMPLE_ROWS)
+            df = pd.read_csv(upload_file)
+            
+            # Validate required columns
+            required_cols = ["Wage Type Code", "Name", "Category"]
+            if all(col in df.columns for col in required_cols):
+                
+                st.subheader("📋 Preview Upload")
+                st.dataframe(df.head(), use_container_width=True)
+                
+                if st.button("📤 Import Wage Types"):
+                    # Convert DataFrame to wage type format
+                    for _, row in df.iterrows():
+                        code = str(row["Wage Type Code"])
+                        current_wage_types[code] = {
+                            "name": row["Name"],
+                            "category": row.get("Category", "other"),
+                            "taxable": row.get("Taxable", True),
+                            "description": row.get("Description", "")
+                        }
+                    
+                    save_payroll_config("wage_types", current_wage_types)
+                    st.success(f"✅ Imported {len(df)} wage types!")
+                    st.rerun()
             else:
-                df = pd.read_excel(uploaded_file, nrows=MAX_SAMPLE_ROWS)
-            
-            # Save sample
-            sample_path = os.path.join(SOURCE_SAMPLES_DIR, f"{pa_code}_sample.csv")
-            df.to_csv(sample_path, index=False)
-            
-            st.success(f"✅ **{pa_code} sample uploaded successfully!**")
-            
-            # Show preview
-            st.subheader("📋 File Preview")
-            st.dataframe(df.head(3), use_container_width=True)
-            
-            # Show field information
-            st.subheader("📊 Available Fields")
-            st.write(f"**Total Records:** {len(df):,}")
-            st.write(f"**Available Fields:** {len(df.columns)}")
-            
-            # Show columns in a neat way
-            col_chunks = [df.columns[i:i+3] for i in range(0, len(df.columns), 3)]
-            for chunk in col_chunks:
-                cols = st.columns(3)
-                for i, col_name in enumerate(chunk):
-                    with cols[i]:
-                        st.write(f"• {col_name}")
-            
+                st.error(f"❌ Missing required columns: {', '.join(required_cols)}")
+                
         except Exception as e:
             st.error(f"❌ Error reading file: {str(e)}")
-            st.info("**Tips:** Make sure your file is a valid CSV or Excel file with payroll data")
 
-def configure_payroll_template():
-    """Configure the payroll data template with simple interface"""
-    st.subheader("🎯 Payroll Data Template")
-    st.info("**What this does:** Define what fields you want in your final payroll file (payroll.csv)")
+def configure_validation_rules():
+    """Configure payroll validation rules"""
+    st.subheader("✅ Payroll Validation Rules")
+    st.info("**What this does:** Set up validation rules to ensure payroll data quality and catch errors")
     
-    # Load current template or use default
-    current_template = load_config("payroll_template") or get_default_payroll_template()
+    # Load current validation rules
+    current_rules = load_payroll_config("validation_rules") or {
+        "rules": [],
+        "thresholds": {},
+        "alerts": {}
+    }
     
-    # Initialize session state
-    if "payroll_template_edit" not in st.session_state:
-        st.session_state["payroll_template_edit"] = current_template.copy()
+    st.markdown("### 🎯 Amount Validation Thresholds")
     
-    st.markdown("**Instructions:** These are the fields that will appear in your final payroll file. You can add, remove, or reorder them.")
+    col1, col2 = st.columns(2)
     
-    # Reset to default
-    col1, col2 = st.columns([3, 1])
     with col1:
-        st.write("**Current Payroll Fields:**")
+        max_regular_pay = st.number_input(
+            "Maximum Regular Pay per Period:",
+            min_value=0.0,
+            value=current_rules.get("thresholds", {}).get("max_regular_pay", 50000.0),
+            help="Alert if regular pay exceeds this amount"
+        )
+        
+        max_overtime_hours = st.number_input(
+            "Maximum Overtime Hours:",
+            min_value=0.0,
+            value=current_rules.get("thresholds", {}).get("max_overtime_hours", 80.0),
+            help="Alert if overtime hours exceed this limit"
+        )
+    
     with col2:
-        if st.button("🔄 Reset to Default", help="Restore the standard payroll fields"):
-            st.session_state["payroll_template_edit"] = get_default_payroll_template()
-            st.rerun()
-    
-    # Show current fields in a simple table
-    if st.session_state["payroll_template_edit"]:
-        for i, field in enumerate(st.session_state["payroll_template_edit"]):
-            cols = st.columns([3, 3, 3, 1, 1])
-            
-            with cols[0]:
-                field['target_column'] = st.text_input(
-                    "Field Code",
-                    value=field['target_column'],
-                    key=f"payroll_field_code_{i}",
-                    help="Technical name (e.g., EMPLOYEE_ID, WAGE_TYPE)"
-                )
-            
-            with cols[1]:
-                field['display_name'] = st.text_input(
-                    "Display Name", 
-                    value=field['display_name'],
-                    key=f"payroll_field_name_{i}",
-                    help="Human-readable name (e.g., Employee ID, Wage Type)"
-                )
-            
-            with cols[2]:
-                field['description'] = st.text_input(
-                    "Description",
-                    value=field.get('description', ''),
-                    key=f"payroll_field_desc_{i}",
-                    help="What this field contains"
-                )
-            
-            with cols[3]:
-                if st.button("⬆️", key=f"payroll_up_{i}", disabled=(i == 0), help="Move up"):
-                    st.session_state["payroll_template_edit"][i], st.session_state["payroll_template_edit"][i-1] = \
-                        st.session_state["payroll_template_edit"][i-1], st.session_state["payroll_template_edit"][i]
-                    st.rerun()
-            
-            with cols[4]:
-                if st.button("🗑️", key=f"payroll_del_{i}", help="Delete field"):
-                    del st.session_state["payroll_template_edit"][i]
-                    st.rerun()
-    
-    # Add new field
-    st.markdown("### ➕ Add New Payroll Field")
-    new_cols = st.columns([3, 3, 3, 1])
-    
-    with new_cols[0]:
-        new_code = st.text_input("Field Code", key="new_payroll_field_code", placeholder="e.g., OVERTIME_RATE")
-    with new_cols[1]:
-        new_name = st.text_input("Display Name", key="new_payroll_field_name", placeholder="e.g., Overtime Rate")
-    with new_cols[2]:
-        new_desc = st.text_input("Description", key="new_payroll_field_desc", placeholder="e.g., Hourly rate for overtime work")
-    with new_cols[3]:
-        if st.button("➕ Add", help="Add this field to the payroll template", key="add_payroll_field"):
-            if new_code and new_name:
-                st.session_state["payroll_template_edit"].append({
-                    "target_column": new_code,
-                    "display_name": new_name,
-                    "description": new_desc
-                })
-                st.success(f"Added {new_name}")
-                st.rerun()
-            else:
-                st.error("Please fill in Field Code and Display Name")
-    
-    # Save template
-    if st.button("💾 Save Payroll Template", type="primary"):
-        # Validate
-        errors = []
-        for i, field in enumerate(st.session_state["payroll_template_edit"]):
-            if not field.get('target_column'):
-                errors.append(f"Field {i+1}: Missing Field Code")
-            if not field.get('display_name'):
-                errors.append(f"Field {i+1}: Missing Display Name")
-        
-        if errors:
-            st.error("**Please fix these issues:**")
-            for error in errors:
-                st.write(f"• {error}")
-        else:
-            save_config_with_session_state("payroll_template", st.session_state["payroll_template_edit"])
-            
-            # Show preview of saved template
-            st.subheader("✅ Saved Payroll Template Preview")
-            template_df = pd.DataFrame(st.session_state["payroll_template_edit"])
-            st.dataframe(template_df[['target_column', 'display_name', 'description']], use_container_width=True)
-
-def configure_field_mappings():
-    """Configure field mappings for payroll with simple explanations"""
-    st.subheader("🔗 Payroll Field Mapping Configuration")
-    st.info("**What this does:** Tell the system which fields from your PA files should go into which payroll data fields")
-    
-    # Load current mappings
-    current_mappings = load_config_with_session_state("payroll_column_mappings") or []
-    
-    # Show current mappings
-    if current_mappings:
-        st.markdown("### 📋 Current Payroll Mappings")
-        
-        mapping_summary = []
-        for mapping in current_mappings:
-            mapping_summary.append({
-                'Payroll Field': mapping.get('target_column', ''),
-                'Source File': mapping.get('source_file', ''),
-                'Source Field': mapping.get('source_column', ''),
-                'Transformation': mapping.get('transformation', 'None')
-            })
-        
-        if mapping_summary:
-            mapping_df = pd.DataFrame(mapping_summary)
-            st.dataframe(mapping_df, use_container_width=True)
-            
-            # Download current mappings
-            csv_data = mapping_df.to_csv(index=False)
-            st.download_button(
-                "📥 Download Current Mappings",
-                data=csv_data,
-                file_name="payroll_field_mappings.csv",
-                mime="text/csv"
-            )
-    
-    # Add new mapping
-    st.markdown("### ➕ Create New Payroll Field Mapping")
-    st.write("**Instructions:** Choose a payroll field, select where the data comes from, and set any transformations needed.")
-    
-    cols = st.columns(2)
-    
-    with cols[0]:
-        # Target field selection
-        template = load_config("payroll_template") or get_default_payroll_template()
-        target_options = [f"{field['target_column']} ({field['display_name']})" for field in template]
-        
-        if target_options:
-            selected_target = st.selectbox(
-                "1. Choose Payroll Field:",
-                target_options,
-                help="Which field in the final payroll file should this data go to?"
-            )
-            
-            if selected_target:
-                target_code = selected_target.split()[0]
-                target_name = selected_target.split('(')[1].rstrip(')')
-        else:
-            st.error("❌ No payroll template configured. Set up the template first.")
-            return
-    
-    with cols[1]:
-        # Source file selection
-        source_file = st.selectbox(
-            "2. Choose Source File:",
-            ["PA0008 (Wage Types)", "PA0014 (Recurring Elements)"],
-            help="Which PA file contains the data you want to use?"
+        min_wage_rate = st.number_input(
+            "Minimum Wage Rate:",
+            min_value=0.0,
+            value=current_rules.get("thresholds", {}).get("min_wage_rate", 7.25),
+            help="Alert if wage rate is below minimum"
         )
         
-        # Extract PA code
-        source_code = source_file.split()[0]
-    
-    # Source field selection
-    source_columns = get_payroll_source_columns(source_code)
-    if source_columns:
-        source_column = st.selectbox(
-            "3. Choose Source Field:",
-            [""] + source_columns,
-            help="Which field in the source file contains the data?"
-        )
-    else:
-        st.warning(f"⚠️ No sample file uploaded for {source_code}. Upload a sample first to see available fields.")
-        source_column = st.text_input(
-            "3. Enter Source Field Name:",
-            help="Type the exact field name from your source file"
+        max_deduction_percent = st.number_input(
+            "Maximum Deduction Percentage:",
+            min_value=0.0,
+            max_value=100.0,
+            value=current_rules.get("thresholds", {}).get("max_deduction_percent", 50.0),
+            help="Alert if total deductions exceed this % of pay"
         )
     
-    # Transformation selection
-    transformation_options = get_simple_transformation_options()
-    transformation = st.selectbox(
-        "4. Choose Transformation:",
-        list(transformation_options.keys()),
-        format_func=lambda x: f"{x} - {transformation_options[x]}",
-        help="How should the data be processed?"
+    # Date validation
+    st.markdown("### 📅 Date Validation Rules")
+    
+    validate_pay_periods = st.checkbox(
+        "Validate Pay Period Dates",
+        value=current_rules.get("alerts", {}).get("validate_pay_periods", True),
+        help="Check that pay periods are logical and sequential"
     )
     
-    # Default value
-    default_value = st.text_input(
-        "5. Default Value (Optional):",
-        help="Value to use if the source field is empty"
+    check_future_dates = st.checkbox(
+        "Alert on Future Dates",
+        value=current_rules.get("alerts", {}).get("check_future_dates", True),
+        help="Warn about payments dated in the future"
     )
     
-    # Add mapping button
-    if st.button("➕ Add This Mapping", type="primary", key="add_payroll_mapping"):
-        if not source_column and not default_value:
-            st.error("❌ Please choose a source field OR enter a default value")
-        else:
-            new_mapping = {
-                "target_column": target_code,
-                "target_display": target_name,
-                "source_file": source_code,
-                "source_column": source_column,
-                "transformation": transformation,
-                "default_value": default_value
+    # Employee validation
+    st.markdown("### 👥 Employee Validation Rules")
+    
+    require_employee_match = st.checkbox(
+        "Require Employee ID Match",
+        value=current_rules.get("alerts", {}).get("require_employee_match", True),
+        help="Ensure all payroll records have valid employee IDs"
+    )
+    
+    check_duplicate_payments = st.checkbox(
+        "Check for Duplicate Payments",
+        value=current_rules.get("alerts", {}).get("check_duplicate_payments", True),
+        help="Alert on potential duplicate payment records"
+    )
+    
+    # Custom validation rules
+    st.markdown("### 🔧 Custom Validation Rules")
+    
+    custom_rules = st.text_area(
+        "Custom Rules (JSON format):",
+        value=json.dumps(current_rules.get("custom_rules", {}), indent=2),
+        height=150,
+        help="Advanced: Custom validation rules in JSON format"
+    )
+    
+    # Save validation rules
+    if st.button("💾 Save Validation Rules", type="primary"):
+        try:
+            custom_rules_data = json.loads(custom_rules) if custom_rules.strip() else {}
+            
+            validation_data = {
+                "thresholds": {
+                    "max_regular_pay": max_regular_pay,
+                    "max_overtime_hours": max_overtime_hours,
+                    "min_wage_rate": min_wage_rate,
+                    "max_deduction_percent": max_deduction_percent
+                },
+                "alerts": {
+                    "validate_pay_periods": validate_pay_periods,
+                    "check_future_dates": check_future_dates,
+                    "require_employee_match": require_employee_match,
+                    "check_duplicate_payments": check_duplicate_payments
+                },
+                "custom_rules": custom_rules_data,
+                "updated": pd.Timestamp.now().isoformat()
             }
             
-            updated_mappings = current_mappings + [new_mapping]
-            save_config_with_session_state("payroll_column_mappings", updated_mappings)
-            st.success(f"✅ Added payroll mapping: {target_name} ← {source_code}:{source_column}")
-            st.rerun()
+            save_payroll_config("validation_rules", validation_data)
+            
+            # Show preview
+            st.subheader("✅ Validation Rules Preview")
+            st.json(validation_data)
+            
+        except json.JSONDecodeError:
+            st.error("❌ Invalid JSON in custom rules")
+        except Exception as e:
+            st.error(f"❌ Error saving validation rules: {str(e)}")
+
+def configure_processing_settings():
+    """Configure payroll processing settings"""
+    st.subheader("⚙️ Payroll Processing Settings")
+    st.info("**What this does:** Configure how PA0008 and PA0014 files are processed and analyzed")
     
-    # Manage existing mappings
-    if current_mappings:
-        st.markdown("### 🗑️ Manage Existing Payroll Mappings")
-        
-        # Select mapping to delete
-        mapping_options = [f"{m.get('target_column', '')} ← {m.get('source_file', '')}:{m.get('source_column', '')}" 
-                          for m in current_mappings]
-        
-        selected_to_delete = st.selectbox(
-            "Select payroll mapping to delete:",
-            [""] + mapping_options,
-            key="delete_payroll_mapping"
+    # Load current settings
+    current_settings = load_payroll_config("processing_settings") or {
+        "batch_size": 5000,
+        "currency_format": "USD",
+        "decimal_places": 2,
+        "date_format": "YYYY-MM-DD",
+        "include_zero_amounts": False,
+        "group_by_employee": True
+    }
+    
+    # Performance settings
+    st.markdown("### 🚀 Performance Settings")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        batch_size = st.number_input(
+            "Batch Processing Size:",
+            min_value=100,
+            max_value=50000,
+            value=current_settings.get("batch_size", 5000),
+            step=500,
+            help="Number of payroll records to process at once"
         )
         
-        if selected_to_delete and st.button("🗑️ Delete Selected Mapping", key="delete_payroll_mapping_btn"):
-            # Find and remove the selected mapping
-            index_to_delete = mapping_options.index(selected_to_delete)
-            del current_mappings[index_to_delete]
-            save_config_with_session_state("payroll_column_mappings", current_mappings)
-            st.success("✅ Payroll mapping deleted")
-            st.rerun()
-
-def quick_setup_wizard():
-    """Quick setup wizard for payroll first-time users"""
-    st.subheader("🚀 Quick Payroll Setup Wizard")
-    st.info("**What this does:** Get your payroll data processing set up quickly with a step-by-step guide")
+        parallel_processing = st.checkbox(
+            "Enable Parallel Processing",
+            value=current_settings.get("parallel_processing", True),
+            help="Process multiple files simultaneously"
+        )
     
-    # Check current setup status
-    template = load_config("payroll_template")
-    mappings = load_config("payroll_column_mappings")
-    
-    # Step indicators
-    steps = [
-        ("1. Payroll Template", template is not None, "Define output fields"),
-        ("2. Sample Files", False, "Upload PA file samples"),  # We'll check this differently
-        ("3. Field Mappings", mappings is not None and len(mappings) > 0, "Connect fields"),
-        ("4. Test & Use", False, "Ready to process")
-    ]
-    
-    # Check sample files
-    sample_count = 0
-    for pa_file in ['PA0008', 'PA0014']:
-        sample_path = os.path.join(SOURCE_SAMPLES_DIR, f"{pa_file}_sample.csv")
-        if os.path.exists(sample_path):
-            sample_count += 1
-    steps[1] = ("2. Sample Files", sample_count >= 2, f"Upload PA file samples ({sample_count}/2 uploaded)")
-    
-    # Final step
-    all_ready = all(step[1] for step in steps[:3])
-    steps[3] = ("4. Test & Use", all_ready, "Ready to process" if all_ready else "Complete steps 1-3")
-    
-    # Show progress
-    st.markdown("### 📊 Setup Progress")
-    
-    for step_name, completed, description in steps:
-        if completed:
-            st.success(f"✅ {step_name}: {description}")
-        else:
-            st.error(f"❌ {step_name}: {description}")
-    
-    # Calculate progress
-    completed_steps = sum(1 for _, completed, _ in steps if completed)
-    progress = completed_steps / len(steps)
-    st.progress(progress)
-    st.caption(f"Setup is {progress*100:.0f}% complete ({completed_steps}/{len(steps)} steps)")
-    
-    # Next step recommendation
-    st.markdown("### 👉 What to do next:")
-    
-    if not template:
-        st.info("**Start with Step 1:** Set up your payroll template to define what fields you want in the final file")
-        if st.button("📋 Go to Payroll Template Setup"):
-            st.session_state.payroll_admin_tab = "Payroll Template"
-            st.rerun()
-    elif sample_count < 2:
-        st.info("**Continue with Step 2:** Upload sample files (need both PA0008 and PA0014)")
-        if st.button("📂 Go to Sample File Upload"):
-            st.session_state.payroll_admin_tab = "Sample Files"
-            st.rerun()
-    elif not mappings or len(mappings) == 0:
-        st.info("**Continue with Step 3:** Create field mappings to connect your PA files to payroll fields")
-        if st.button("🔗 Go to Field Mapping"):
-            st.session_state.payroll_admin_tab = "Field Mapping"
-            st.rerun()
-    else:
-        st.success("🎉 **Setup Complete!** You're ready to process payroll data")
-        st.info("**What to do now:** Go to the Payroll panel and upload your full PA files to start processing")
+    with col2:
+        memory_optimization = st.checkbox(
+            "Memory Optimization",
+            value=current_settings.get("memory_optimization", True),
+            help="Use memory-efficient processing for large payroll files"
+        )
         
-        # Show summary of what's configured
-        st.markdown("### ✅ Configuration Summary")
-        st.write(f"• **Payroll Template:** {len(template)} fields configured")
-        st.write(f"• **Sample Files:** {sample_count}/2 files uploaded")
-        st.write(f"• **Field Mappings:** {len(mappings)} mappings created")
+        progress_reporting = st.checkbox(
+            "Show Detailed Progress",
+            value=current_settings.get("progress_reporting", True),
+            help="Display detailed progress during processing"
+        )
+    
+    # Data formatting
+    st.markdown("### 💱 Data Formatting")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        currency_format = st.selectbox(
+            "Currency Format:",
+            ["USD", "EUR", "GBP", "CAD", "AUD", "Other"],
+            index=["USD", "EUR", "GBP", "CAD", "AUD", "Other"].index(current_settings.get("currency_format", "USD")),
+            help="Default currency for amount formatting"
+        )
+        
+        decimal_places = st.number_input(
+            "Decimal Places:",
+            min_value=0,
+            max_value=6,
+            value=current_settings.get("decimal_places", 2),
+            help="Number of decimal places for amounts"
+        )
+    
+    with col2:
+        date_format = st.selectbox(
+            "Date Format:",
+            ["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY", "DD-MMM-YYYY"],
+            index=["YYYY-MM-DD", "MM/DD/YYYY", "DD/MM/YYYY", "DD-MMM-YYYY"].index(current_settings.get("date_format", "YYYY-MM-DD")),
+            help="Format for date fields in output"
+        )
+        
+        include_zero_amounts = st.checkbox(
+            "Include Zero Amount Records",
+            value=current_settings.get("include_zero_amounts", False),
+            help="Include payroll records with zero amounts"
+        )
+    
+    # Grouping and aggregation
+    st.markdown("### 📊 Data Grouping & Aggregation")
+    
+    group_by_employee = st.checkbox(
+        "Group by Employee",
+        value=current_settings.get("group_by_employee", True),
+        help="Group payroll data by employee for analysis"
+    )
+    
+    group_by_pay_period = st.checkbox(
+        "Group by Pay Period",
+        value=current_settings.get("group_by_pay_period", True),
+        help="Group data by pay periods for trend analysis"
+    )
+    
+    calculate_totals = st.checkbox(
+        "Calculate Summary Totals",
+        value=current_settings.get("calculate_totals", True),
+        help="Calculate total pay, deductions, and net pay"
+    )
+    
+    # Output options
+    st.markdown("### 📤 Output Options")
+    
+    output_format = st.selectbox(
+        "Output File Format:",
+        ["csv", "excel", "json"],
+        index=["csv", "excel", "json"].index(current_settings.get("output_format", "csv")),
+        help="Format for generated payroll files"
+    )
+    
+    include_analytics = st.checkbox(
+        "Include Analytics Sheet",
+        value=current_settings.get("include_analytics", True),
+        help="Add analytics and summary data to output"
+    )
+    
+    # Save settings
+    if st.button("💾 Save Processing Settings", type="primary"):
+        settings_data = {
+            "batch_size": batch_size,
+            "parallel_processing": parallel_processing,
+            "memory_optimization": memory_optimization,
+            "progress_reporting": progress_reporting,
+            "currency_format": currency_format,
+            "decimal_places": decimal_places,
+            "date_format": date_format,
+            "include_zero_amounts": include_zero_amounts,
+            "group_by_employee": group_by_employee,
+            "group_by_pay_period": group_by_pay_period,
+            "calculate_totals": calculate_totals,
+            "output_format": output_format,
+            "include_analytics": include_analytics,
+            "updated": pd.Timestamp.now().isoformat()
+        }
+        
+        save_payroll_config("processing_settings", settings_data)
+        
+        # Show preview
+        st.subheader("✅ Settings Preview")
+        st.json(settings_data)
+
+def system_maintenance():
+    """System maintenance and cleanup tools"""
+    st.subheader("🔧 Payroll System Maintenance")
+    st.info("**What this does:** Maintenance tools for the Payroll Data Management system")
+    
+    # Configuration backup/restore
+    st.markdown("### 💾 Configuration Backup & Restore")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**📥 Backup Configuration**")
+        if st.button("📦 Create Payroll Backup"):
+            try:
+                # Collect all configurations
+                backup_data = {
+                    "wage_types": load_payroll_config("wage_types"),
+                    "validation_rules": load_payroll_config("validation_rules"),
+                    "processing_settings": load_payroll_config("processing_settings"),
+                    "backup_timestamp": pd.Timestamp.now().isoformat(),
+                    "system": "payroll"
+                }
+                
+                # Create downloadable backup
+                backup_json = json.dumps(backup_data, indent=2)
+                st.download_button(
+                    "📥 Download Payroll Backup",
+                    data=backup_json,
+                    file_name=f"payroll_config_backup_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json"
+                )
+                st.success("✅ Payroll backup created successfully!")
+                
+            except Exception as e:
+                st.error(f"❌ Error creating backup: {str(e)}")
+    
+    with col2:
+        st.markdown("**📤 Restore Configuration**")
+        restore_file = st.file_uploader(
+            "Upload Payroll Backup:",
+            type=['json'],
+            help="Select a payroll configuration backup file"
+        )
+        
+        if restore_file and st.button("🔄 Restore Payroll Config"):
+            try:
+                backup_data = json.load(restore_file)
+                
+                # Verify it's a payroll backup
+                if backup_data.get("system") != "payroll":
+                    st.warning("⚠️ This doesn't appear to be a payroll backup file")
+                
+                # Restore each configuration
+                for config_type, config_data in backup_data.items():
+                    if config_type not in ["backup_timestamp", "system"] and config_data:
+                        save_payroll_config(config_type, config_data)
+                
+                st.success("✅ Payroll configuration restored successfully!")
+                st.info("Please refresh the page to see restored settings")
+                
+            except Exception as e:
+                st.error(f"❌ Error restoring configuration: {str(e)}")
+    
+    # Clear cache and reset
+    st.markdown("### 🗑️ Clear Data & Reset")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🧹 Clear Payroll Cache"):
+            # Clear payroll-related session state
+            keys_to_clear = [key for key in st.session_state.keys() if 'payroll' in key.lower()]
+            for key in keys_to_clear:
+                del st.session_state[key]
+            st.success("✅ Payroll cache cleared!")
+    
+    with col2:
+        if st.button("⚠️ Reset Payroll Configuration", type="secondary"):
+            st.warning("This will delete all payroll configuration files!")
+            if st.checkbox("I understand this cannot be undone", key="payroll_reset_confirm"):
+                try:
+                    # Remove configuration files
+                    for config_file in Path(CONFIG_DIR).glob("*.json"):
+                        config_file.unlink()
+                    st.success("✅ All payroll configurations reset!")
+                except Exception as e:
+                    st.error(f"❌ Error resetting: {str(e)}")
 
 def show_payroll_admin_panel():
-    """Main payroll admin panel with clean, simple interface"""
+    """Main payroll admin panel with authentication"""
+    auth = create_payroll_admin()
     
-    # Clean header
-    st.markdown("""
-    <div style="background: linear-gradient(90deg, #16a085 0%, #27ae60 100%); 
-                color: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem;">
-        <h1 style="margin: 0; font-size: 2.5rem;">Payroll Configuration Center</h1>
-        <p style="margin: 0.5rem 0 0 0; font-size: 1.2rem; opacity: 0.9;">
-            Set up how your PA files should be converted to payroll data
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Initialize directories
-    initialize_directories()
-    
-    # Configuration status at top
-    show_configuration_status()
-    
-    st.markdown("---")
-    
-    # Main tabs
-    tabs = st.tabs([
-        "🚀 Quick Setup",
-        "📂 Sample Files", 
-        "📋 Payroll Template",
-        "🔗 Field Mapping"
-    ])
-    
-    with tabs[0]:
-        quick_setup_wizard()
-    
-    with tabs[1]:
-        upload_sample_files()
-    
-    with tabs[2]:
-        configure_payroll_template()
-    
-    with tabs[3]:
-        configure_field_mappings()
-    
-    # Help section
-    st.markdown("---")
-    with st.expander("❓ Need Help with Payroll Configuration?", expanded=False):
+    def payroll_admin_content():
+        # Clean header
         st.markdown("""
-        **Payroll Configuration Overview:**
+        <div style="background: linear-gradient(90deg, #dc2626 0%, #ef4444 100%); 
+                    color: white; padding: 2rem; border-radius: 10px; margin-bottom: 2rem;">
+            <h1 style="margin: 0; font-size: 2.5rem;">💰 Payroll Configuration Center</h1>
+            <p style="margin: 0.5rem 0 0 0; font-size: 1.2rem; opacity: 0.9;">
+                Configure how your PA0008 & PA0014 files are processed for payroll analysis
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        📋 **Payroll Template:** Defines what fields you want in your final payroll file (payroll.csv)
-        📂 **Sample Files:** Small samples of your PA files so we can see what payroll data is available
-        🔗 **Field Mapping:** Connects fields from your PA files to fields in the payroll template
+        # Initialize directories
+        initialize_payroll_directories()
         
-        **Setup Order:**
-        1. **Upload Sample Files** - Upload PA0008 and PA0014 files
-        2. **Configure Template** - Define what fields you want in the output
-        3. **Create Mappings** - Connect PA file fields to payroll template fields
-        4. **Test Processing** - Go to Payroll panel to test with real data
+        # Configuration status at top
+        show_payroll_configuration_status()
         
-        **Common Questions:**
+        st.markdown("---")
         
-        **Q: Which PA files do I need for payroll?**
-        A: PA0008 (Wage Types) and PA0014 (Recurring Elements) are both required for complete payroll processing.
+        # Main tabs
+        tabs = st.tabs([
+            "💰 Wage Types",
+            "✅ Validation Rules",
+            "⚙️ Processing Settings",
+            "🔧 System Maintenance"
+        ])
         
-        **Q: What's the difference between sample files and real files?**
-        A: Sample files are small portions used for configuration. Real files are your full payroll data used for processing.
+        with tabs[0]:
+            configure_wage_types()
         
-        **Q: How do payroll transformations work?**
-        A: Transformations format data appropriately (e.g., "123.456" → "$123.46" with Currency Format).
+        with tabs[1]:
+            configure_validation_rules()
         
-        **Q: What if I make a mistake in payroll configuration?**
-        A: You can always come back and change mappings, add/remove fields, or reset to defaults.
+        with tabs[2]:
+            configure_processing_settings()
         
-        **Q: What are wage types vs recurring elements?**
-        A: Wage types (PA0008) are payments like salary, bonuses, overtime. Recurring elements (PA0014) are regular deductions/benefits like taxes, insurance.
-        """)
+        with tabs[3]:
+            system_maintenance()
+        
+        # Help section
+        st.markdown("---")
+        with st.expander("❓ Payroll Configuration Help", expanded=False):
+            st.markdown("""
+            **Payroll Configuration Overview:**
+            
+            💰 **Wage Types:** Define how wage type codes are interpreted and categorized
+            ✅ **Validation Rules:** Set thresholds and checks for data quality
+            ⚙️ **Processing Settings:** Control performance, formatting, and output options
+            🔧 **System Maintenance:** Backup/restore configurations and system cleanup
+            
+            **Important Files:**
+            - **PA0008:** Contains basic pay information (salary, hourly rates)
+            - **PA0014:** Contains recurring payments and deductions
+            
+            **Common Tasks:**
+            1. **Map Wage Types:** Define what each 4-digit wage type code means
+            2. **Set Validation Thresholds:** Configure alerts for unusual amounts
+            3. **Configure Processing:** Set batch sizes and output formats
+            4. **Backup Settings:** Save your configuration before making changes
+            
+            **Tips:**
+            - Start by mapping the most common wage types in your data
+            - Set realistic validation thresholds based on your payroll ranges
+            - Use bulk upload for large wage type lists
+            - Regular backups prevent configuration loss
+            """)
+    
+    # Apply authentication wrapper
+    auth.require_auth(payroll_admin_content)
